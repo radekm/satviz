@@ -2,6 +2,7 @@
 
 module TestSolver
 
+import Common
 import Solver
 
 instance (Eq a, Eq b) => Eq (Either a b) where
@@ -119,9 +120,6 @@ prob_unsat2 = do
 
 test_solve_unsat2 : so $ isUnsat prob_unsat2
 test_solve_unsat2 = oh
-
-mapM_ : Monad m => (a -> m b) -> List a -> m ()
-mapM_ f = sequence_ . map f
 
 php : Nat -> Nat -> SatAlgo r ()
 php np nh = do
