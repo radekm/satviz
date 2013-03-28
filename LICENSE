@@ -1,5 +1,8 @@
-This software is distributed under the terms of the MIT License
-(included below).
+All files copyrighted by Radek Micek are distributed under the terms
+of the MIT License (included below).
+
+D3 library (in the directory d3) is distributed under the terms
+of the 3-clause BSD license (see d3/LICENSE).
 
 ------------------------------------------------------------------------------
 
