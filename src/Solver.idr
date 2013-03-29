@@ -105,7 +105,7 @@ findClause : CId -> List Clause -> Clause
 findClause cid = fromJust . find (\(MkClause cid' _) => cid == cid')
 
 trailToAssig : Trail -> Assignment
-trailToAssig trail = \l =>
+trailToAssig trail l =
   let (MkLit _ var) = l in
   case findInTrail var trail of
     Nothing => LUndef
