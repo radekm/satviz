@@ -5,6 +5,25 @@ module D3
 import Common
 
 -- ---------------------------------------------------------------------------
+-- Dialogs
+
+prompt : String -> IO (Maybe String)
+prompt msg =
+  mkForeign
+    (FFun
+       "promptHelper"
+       [FString, FAny (() -> Maybe String), FAny (String -> Maybe String)]
+       (FAny $ Maybe String))
+    msg
+    mkNothing
+    mkJust
+  where
+    mkNothing : () -> Maybe String
+    mkNothing () = Nothing
+    mkJust : String -> Maybe String
+    mkJust s = Just s
+
+-- ---------------------------------------------------------------------------
 -- Arrays
 
 data Array a = MkArray Ptr
@@ -182,3 +201,10 @@ enter sel =
 exit : Sel a b -> IO (Sel a b)
 exit sel =
   mkForeign (FFun ".exit" [FAny $ Sel _ _, FUnit] (FAny $ Sel _ _)) sel ()
+
+-- ---------------------------------------------------------------------------
+-- Events
+
+onClick : Sel a b -> (() -> IO ()) -> IO ()
+onClick sel h =
+  mkForeign (FFun "onClick" [FAny $ Sel _ _, FAny (() -> IO ())] FUnit) sel h

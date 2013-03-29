@@ -1,5 +1,19 @@
 // Copyright (c) 2013 Radek Micek
 
+var promptHelper = function (msg, mkNothing, mkJust) {
+  var result = prompt(msg);
+  if (result === null) {
+    return __IDRRT__.tailcall(function () {
+      return __IDR__.APPLY0(mkNothing, undefined);
+    });
+  }
+  else {
+    return __IDRRT__.tailcall(function () {
+      return __IDR__.APPLY0(mkJust, result);
+    });
+  }
+}
+
 var getNth = function (arr, i) {
   return arr[i];
 }
@@ -89,4 +103,12 @@ var bindKPrime = function (sel, f, key) {
       });
     }
   );
+}
+
+function onClick(sel, handler) {
+  sel.on("click", function () {
+    return __IDRRT__.tailcall(function () {
+      return __IDR__.APPLY0(handler, undefined);
+    });
+  });
 }
