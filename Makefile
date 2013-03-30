@@ -7,6 +7,10 @@ IDRIS = idris
 default:
 	@echo "Please select a target"
 
+satviz:
+	$(IDRIS) --target javascript -i src -o src/Satviz.js \
+	    src/Main.idr
+
 test:
 	$(IDRIS) --check -i src test/TestSolver.idr
 
@@ -24,6 +28,7 @@ d3-samples:
 
 clean:
 	rm -f src/*.ibc
+	rm -f src/Satviz.js
 	rm -f test/*.ibc
 	rm -f d3-samples/*.ibc
 	rm -f d3-samples/*.js
