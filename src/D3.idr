@@ -157,6 +157,9 @@ append elem sel =
 remove : Sel a b -> IO ()
 remove sel = mkForeign (FFun ".remove" [FAny $ Sel _ _, FUnit] FUnit) sel ()
 
+forgetBoundData : Sel a b -> IO (Sel NoData NoData)
+forgetBoundData (MkSel s) = return $ MkSel s
+
 castBoundData : Sel a b -> IO (Sel a c)
 castBoundData (MkSel s) = return $ MkSel s
 
