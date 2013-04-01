@@ -24,6 +24,19 @@ modifyIORef : IORef a -> (a -> a) -> IO ()
 modifyIORef r f = (pure f <$> readIORef r) >>= writeIORef r
 
 -- ---------------------------------------------------------------------------
+
+litToHtml : Lit -> String
+litToHtml (MkLit Pos lit) = lit
+litToHtml (MkLit Neg lit) = "&#172;" ++ lit
+
+clauseToHtml : Clause -> String
+clauseToHtml (MkClause _ lits) =
+  case lits of
+    [] => "&#9633;"
+    l :: ls =>
+      litToHtml l ++ mconcat (map (\l' => " &#8744; " ++ litToHtml l') ls)
+
+-- ---------------------------------------------------------------------------
 -- Message view
 
 data MsgView = MkMsgView (Sel NoData NoData)
@@ -38,6 +51,11 @@ createMsgView cssClass parent = do
 refreshMsgView : MsgView -> String -> IO ()
 refreshMsgView (MkMsgView v) msg = do
   v ?? text msg
+  return ()
+
+refreshMsgViewHtml : MsgView -> String -> IO ()
+refreshMsgViewHtml (MkMsgView v) msg = do
+  v ?? html msg
   return ()
 
 -- ---------------------------------------------------------------------------
@@ -93,10 +111,58 @@ refreshClauseView (MkClauseView v) clauseList trail = do
 record State : Type where
   MkState :
     (stSol : Sol) ->
+    (stLastInterrupt : Maybe (Event, Sol -> AlgoResult Sol Event Result)) ->
     (stMsgView : MsgView) ->
     (stClauseView : ClauseView) ->
     (stAddClauseBtn : Sel NoData NoData) ->
+    (stStartVisBtn : Sel NoData NoData) ->
+    (stNextBtn : Sel NoData NoData) ->
     State
+
+-- Updates the message and the information about the last interrupt.
+procAlgoResult : AlgoResult Sol Event Result -> IORef State -> IO ()
+procAlgoResult algoRes r = do
+  s <- readIORef r
+  let putMsg = refreshMsgViewHtml (stMsgView s)
+  case algoRes of
+    Finish sol res => do
+      (stNextBtn s) ?? remove
+      modifyIORef r (record { stSol = sol, stLastInterrupt = Nothing })
+      case res of
+        Sat => putMsg "SAT"
+        Unsat => putMsg "UNSAT - conflict clause on decision level 0"
+    Interrupt sol e k => do
+      modifyIORef r (record { stSol = sol, stLastInterrupt = Just (e, k) })
+      case e of
+        EDecide lit => putMsg $ "Decision: satisfy " ++ litToHtml lit
+        EProp lit cl =>
+          putMsg $ "Propagation: clause "
+            ++ clauseToHtml cl
+            ++ " forces "
+            ++ litToHtml lit
+        EConfl cl =>
+          putMsg $ "Conflict clause "
+            ++ clauseToHtml cl
+            ++ " detected"
+        ELearn cl =>
+          putMsg $ "Learning: add asserting clause "
+            ++ clauseToHtml cl
+        EBacktrack lit _ => putMsg $ "Backtracking: undo " ++ litToHtml lit
+
+-- Updates the visualization to correspond to the current state.
+-- Runs the solver and updates the message with the description
+-- of what the solver did.
+next : IORef State -> IO ()
+next r = do
+  s <- readIORef r
+  case stLastInterrupt s of
+    Nothing => return ()
+    Just (e, k) => do
+      refreshClauseView
+        (stClauseView s)
+        (sClauses $ stSol $ s)
+        (sTrail $ stSol $ s)
+      procAlgoResult (resume (stSol s) k) r
 
 init : Sel NoData NoData -> IO ()
 init parent = do
@@ -109,11 +175,19 @@ init parent = do
                     attr "type" "button" >=>
                     property "value" "Add clause"
 
+  startVisBtn <- parent ?? append "input" >=>
+                   classed "startVisBtn" True >=>
+                   attr "type" "button" >=>
+                   property "value" "Start visualization"
+
   r <- newIORef $ MkState
          emptySol
+         Nothing
          msgView
          clauseView
          addClauseBtn
+         startVisBtn
+         d3 -- Dummy.
 
   addClauseBtn `onClick` \() => do
     litsStr <- prompt "Enter clause"
@@ -133,6 +207,21 @@ init parent = do
             modifyIORef r (record { stSol = sol })
             refreshClauseView (stClauseView s) (sClauses sol) (sTrail sol)
             refreshMsgView (stMsgView s) ""
+
+  startVisBtn `onClick` \() => do
+    s <- readIORef r
+    (stAddClauseBtn s) ?? remove
+    (stStartVisBtn s) ?? remove
+
+    nextBtn <- parent ?? append "input" >=>
+                 classed "nextBtn" True >=>
+                 attr "type" "button" >=>
+                 property "value" "Next"
+    nextBtn `onClick` \() => next r
+
+    modifyIORef r (record { stNextBtn = nextBtn })
+
+    procAlgoResult (run (stSol s) solve) r
 
 main : IO ()
 main =
