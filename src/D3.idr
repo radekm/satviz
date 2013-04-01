@@ -5,6 +5,11 @@ module D3
 import Common
 
 -- ---------------------------------------------------------------------------
+
+decodeEntities : String -> IO String
+decodeEntities str = mkForeign (FFun "decodeEntities" [FString] FString) str
+
+-- ---------------------------------------------------------------------------
 -- Dialogs
 
 prompt : String -> IO (Maybe String)

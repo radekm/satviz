@@ -1,5 +1,23 @@
 // Copyright (c) 2013 Radek Micek
 
+var decodeEntities = (function() {
+  var el = document.createElement('div');
+
+  function decodeInternal (str) {
+    if(str && typeof str === 'string') {
+      str = str.replace(/</g, '&lt;');
+      str = str.replace(/>/g, '&gt;');
+      el.innerHTML = str;
+      str = el.textContent;
+      el.textContent = '';
+    }
+
+    return str;
+  }
+
+  return decodeInternal;
+})();
+
 var promptHelper = function (msg, mkNothing, mkJust) {
   var result = prompt(msg);
   if (result === null) {
