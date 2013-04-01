@@ -53,3 +53,37 @@ ul.clauseView li.unsat {
 ul.clauseView li.unassigned {
   color: black;
 }
+
+ul.assigView {
+  list-style-type: none;
+  border: 1px solid blue;
+  width: 224px;
+  height: 300px;
+  overflow: auto;
+  margin: 0;
+  padding: 0 4px;
+}
+
+ul.assigView ul {
+  /* Space among lines. */
+  margin: 12px 0;
+  padding: 0;
+}
+
+ul.assigView ul li {
+  display: inline;
+  border-radius: 8px;
+  padding: 2px 6px;
+  /* Space among literals on the same line. */
+  margin: 0px 3px;
+}
+
+ul.assigView li.decided {
+  background-color: #aaa;
+  border: 1px solid #777;
+}
+
+ul.assigView li.forced {
+  background-color: #33cc66;
+  border: 1px solid #009933;
+}

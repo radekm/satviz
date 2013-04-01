@@ -104,6 +104,56 @@ refreshClauseView (MkClauseView v) clauseList trail = do
     litClass LUndef = "unassigned"
 
 -- ---------------------------------------------------------------------------
+-- Assignment view
+
+data AssigView = MkAssigView (Sel NoData NoData)
+
+createAssigView : String -> Sel a b -> IO AssigView
+createAssigView cssClass parent = do
+  pure MkAssigView <$> (parent ??
+    append "ul" >=>
+    forgetBoundData >=>
+    classed cssClass True >=>
+    classed "assigViewRoot" True)
+
+refreshAssigView : AssigView -> List Clause -> Trail -> IO ()
+refreshAssigView (MkAssigView v) clauses trail = do
+    trailArr <- emptyA ()
+    mapM_ (mkArray >=> pushA trailArr) $ groupBy sameLevel $ reverse trail
+
+    levels <- v ?? selectAll "ul.assigViewRoot > li" >=>
+                bind trailArr
+    levels ?? exit >=> remove
+    levels ?? enter >=>
+      append "li" >=>
+      append "ul"
+
+    lits <- levels ?? select "ul" >=>
+              selectAll "li" >=>
+              bind' (const . pure)
+    lits ?? exit >=> remove
+    lits ?? enter >=>
+      append "li"
+
+    lits ??
+      html' (const . pure . litHtml) >=>
+      attr' "title" (const . decodeEntities . litTitle) >=>
+      attr' "class" (const . pure . litClass)
+
+    return ()
+  where
+    sameLevel : (Lit, Maybe Ante, Level) -> (Lit, Maybe Ante, Level) -> Bool
+    sameLevel (_, _, l) (_, _, l') = l == l'
+    litTitle : (Lit, Maybe Ante, Level) -> String
+    litTitle (_, Nothing, _) = ""
+    litTitle (_, Just cid, _) = clauseToHtml $ findClause cid clauses
+    litHtml : (Lit, Maybe Ante, Level) -> String
+    litHtml (lit, _, _) = litToHtml lit
+    litClass : (Lit, Maybe Ante, Level) -> String
+    litClass (_, Nothing, _) = "decided"
+    litClass (_, Just _, _) = "forced"
+
+-- ---------------------------------------------------------------------------
 
 record State : Type where
   MkState :
@@ -111,6 +161,7 @@ record State : Type where
     (stLastInterrupt : Maybe (Event, Sol -> AlgoResult Sol Event Result)) ->
     (stMsgView : MsgView) ->
     (stClauseView : ClauseView) ->
+    (stAssigView : AssigView) ->
     (stAddClauseBtn : Sel NoData NoData) ->
     (stStartVisBtn : Sel NoData NoData) ->
     (stNextBtn : Sel NoData NoData) ->
@@ -159,6 +210,10 @@ next r = do
         (stClauseView s)
         (sClauses $ stSol $ s)
         (sTrail $ stSol $ s)
+      refreshAssigView
+        (stAssigView s)
+        (sClauses $ stSol s)
+        (sTrail $ stSol s)
       procAlgoResult (resume (stSol s) k) r
 
 init : Sel NoData NoData -> IO ()
@@ -166,6 +221,8 @@ init parent = do
   msgView <- parent ?? createMsgView "msgView"
 
   clauseView <- parent ?? createClauseView "clauseView"
+
+  assigView <- parent ?? createAssigView "assigView"
 
   addClauseBtn <- parent ?? append "input" >=>
                     classed "addClauseBtn" True >=>
@@ -182,6 +239,7 @@ init parent = do
          Nothing
          msgView
          clauseView
+         assigView
          addClauseBtn
          startVisBtn
          d3 -- Dummy.
