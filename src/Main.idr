@@ -93,14 +93,11 @@ refreshClauseView (MkClauseView v) clauseList trail = do
       append "li"
 
     lits ??
-      html' (\lit, i => return $ litHtml lit) >=>
+      html' (\lit, i => return $ litToHtml lit) >=>
       attr' "class" (\lit, i => return $ litClass $ assig lit)
 
     return ()
   where
-    litHtml : Lit -> String
-    litHtml (MkLit Pos lit) = lit
-    litHtml (MkLit Neg lit) = "&#172;" ++ lit
     litClass : LBool -> String
     litClass LTrue = "sat"
     litClass LFalse = "unsat"
