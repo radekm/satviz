@@ -214,16 +214,20 @@ analyzeConflict (MkClause _ conflLits) = do
       else
         case trail of
           (MkLit _ var, Just ante, _) :: ts => do
-            let anteCl =
-              fromJust
-                $ List.find (\(MkClause cid _) => cid == ante)
-                $ sClauses s
-            let anteLits = getLits anteCl
-            let resolvent =
-              List.nub
-                $ filter (\(MkLit _ v) => v /= var)
-                $ lits ++ anteLits
-            resolve s ts resolvent
+            if find (\(MkLit _ v) => v == var) lits == Nothing then
+              resolve s ts lits
+            -- var is among lits, so we resolve it out.
+            else do
+              let anteCl =
+                fromJust
+                  $ List.find (\(MkClause cid _) => cid == ante)
+                  $ sClauses s
+              let anteLits = getLits anteCl
+              let resolvent =
+                List.nub
+                  $ filter (\(MkLit _ v) => v /= var)
+                  $ lits ++ anteLits
+              resolve s ts resolvent
           -- missing case: []
 
 -- Assumes that every literal in the clause is assigned.
