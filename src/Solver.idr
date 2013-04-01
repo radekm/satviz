@@ -218,10 +218,7 @@ analyzeConflict (MkClause _ conflLits) = do
               resolve s ts lits
             -- var is among lits, so we resolve it out.
             else do
-              let anteCl =
-                fromJust
-                  $ List.find (\(MkClause cid _) => cid == ante)
-                  $ sClauses s
+              let anteCl = findClause ante $ sClauses s
               let anteLits = getLits anteCl
               let resolvent =
                 List.nub
