@@ -1,18 +1,40 @@
 /* Copyright (c) 2013 Radek Micek */
 
+body {
+  font-size: 18px;
+}
+
+input.addClauseBtn {
+  position: absolute;
+  top: 428px;
+  left: 242px;
+}
+
+input.startVisBtn, input.nextBtn {
+  position: absolute;
+  top: 428px;
+  left: 4px;
+}
+
 div.msgView {
+  position: absolute;
+  top: 4px;
+  left: 4px;
   border: 1px solid blue;
   width: 220px;
-  height: 120px;
+  height: 100px;
   margin: 0;
   padding: 6px;
 }
 
 ul.clauseView {
+  position: absolute;
+  top: 4px;
+  left: 242px;
   list-style-type: none;
   border: 1px solid blue;
   width: 220px;
-  height: 400px;
+  height: 418px;
   overflow: auto;
   margin: 0;
   padding: 0 6px;
@@ -55,6 +77,9 @@ ul.clauseView li.unassigned {
 }
 
 ul.assigView {
+  position: absolute;
+  top: 122px;
+  left: 4px;
   list-style-type: none;
   border: 1px solid blue;
   width: 224px;
