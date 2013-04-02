@@ -55,6 +55,31 @@ setNth : Array a -> Int -> a -> IO ()
 setNth xs i x =
   mkForeign (FFun "setNth" [FAny $ Array _, FInt, FAny _] FUnit) xs i x
 
+arrayToList : {a : _} -> Array a -> IO (List a)
+arrayToList {a} xs = lengthA xs >>= loop [] . flip (-) 1
+  where
+    loop : List a -> Int -> IO (List a)
+    loop acc i =
+      if i >= 0 then do
+        x <- getNth xs i
+        loop (x :: acc) (i - 1)
+      else
+        return acc
+
+anyA : {a : _} -> (a -> Bool) -> Array a -> IO Bool
+anyA {a} f xs =
+  pure (/= 0) <$> mkForeign (FFun "anyA" [FAny _, FAny $ Array _] FInt) f2 xs
+  where
+    f2 : a -> Int
+    f2 x = (f x) ? 1 : 0
+
+filterA : {a : _} -> (a -> Bool) -> Array a -> IO (Array a)
+filterA {a} f xs =
+  mkForeign (FFun "filterA" [FAny _, FAny $ Array _] (FAny $ Array _)) f2 xs
+  where
+    f2 : a -> Int
+    f2 x = (f x) ? 1 : 0
+
 -- ---------------------------------------------------------------------------
 -- Selecting elements
 

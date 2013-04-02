@@ -4,20 +4,30 @@ module Main
 
 import D3
 
--- Prints: 4, 3, 5, 0, 1, 17
 main : IO ()
 main = do
+
+  -- Prints: 3, 5
   arr <- mkArray [1, 2, 3, 6]
-  pure print <$> lengthA arr
-
-  pure print <$> getNth arr 2
+  getNth arr 2 >>= print
   setNth arr 2 5
-  pure print <$> getNth arr 2
+  getNth arr 2 >>= print
 
+  -- Prints: 0, 1, 17
   arr2 <- emptyA ()
-  pure print <$> lengthA arr2
+  lengthA arr2 >>= print
   pushA arr2 17
-  pure print <$> lengthA arr2
-  pure print <$> getNth arr2 0
+  lengthA arr2 >>= print
+  getNth arr2 0 >>= print
+
+  -- Prints: True, False
+  anyA (== 5) arr >>= print
+  anyA (== 3) arr >>= print
+
+  -- Prints: [1, 2, 5, 6]
+  --         [1, 2]
+  arr3 <- filterA (< 4) arr
+  arrayToList arr >>= print
+  arrayToList arr3 >>= print
 
   return ()

@@ -40,6 +40,24 @@ var setNth = function (arr, i, val) {
   arr[i] = val;
 }
 
+var anyA = function (f, arr) {
+  var res = arr.some(function (x) {
+    return __IDRRT__.tailcall(function () {
+      return __IDR__.APPLY0(f, x);
+    });
+  });
+
+  return res ? 1 : 0;
+}
+
+var filterA = function (f, arr) {
+  return arr.filter(function (x) {
+    return __IDRRT__.tailcall(function () {
+      return __IDR__.APPLY0(f, x);
+    });
+  });
+}
+
 var d3Root = function () {
   return window.d3;
 }
