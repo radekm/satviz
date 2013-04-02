@@ -208,8 +208,8 @@ next r = do
     Just (e, k) => do
       refreshClauseView
         (stClauseView s)
-        (sClauses $ stSol $ s)
-        (sTrail $ stSol $ s)
+        (sClauses $ stSol s)
+        (sTrail $ stSol s)
       refreshAssigView
         (stAssigView s)
         (sClauses $ stSol s)
