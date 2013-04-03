@@ -25,6 +25,8 @@ d3-samples:
 	    d3-samples/BindingByKey.idr
 	$(IDRIS) --target javascript -i src -o d3-samples/Prompt.js \
 	    d3-samples/Prompt.idr
+	$(IDRIS) --target javascript -i src -o d3-samples/ForceLayout.js \
+	    d3-samples/ForceLayout.idr
 
 clean:
 	rm -f src/*.ibc

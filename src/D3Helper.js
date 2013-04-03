@@ -148,3 +148,31 @@ var onClick = function (sel, handler) {
     });
   });
 };
+
+var mkNode = function (x, y, d) {
+  return { x : x, y : y, data : d };
+};
+
+var mkLink = function (src, tgt, d) {
+  return { source : src, target : tgt, data : d };
+};
+
+var mkForceLayout = function (width, height) {
+  return window.d3.layout.force().size([width, height]);
+};
+
+var getWidthL = function (fl) {
+  return fl.size()[0];
+};
+
+var getHeightL = function (fl) {
+  return fl.size()[1];
+};
+
+var onTickL = function (fl, handler) {
+  fl.on("tick", function () {
+    return __IDRRT__.tailcall(function () {
+      return __IDR__.APPLY0(handler, undefined);
+    });
+  });
+};

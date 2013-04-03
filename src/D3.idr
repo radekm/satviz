@@ -241,3 +241,109 @@ exit sel =
 onClick : Sel a b -> (() -> IO ()) -> IO ()
 onClick sel h =
   mkForeign (FFun "onClick" [FAny $ Sel _ _, FAny (() -> IO ())] FUnit) sel h
+
+-- ---------------------------------------------------------------------------
+-- Force layout
+
+data Node a = MkNode Ptr
+
+mkNode : Float -> Float -> a -> IO (Node a)
+mkNode x y d =
+  mkForeign (FFun "mkNode" [FFloat, FFloat, FAny _] (FAny $ Node _)) x y d
+
+getX : Node a -> IO Float
+getX n = mkForeign (FFun ".x" [FAny $ Node _] FFloat) n
+
+getY : Node a -> IO Float
+getY n = mkForeign (FFun ".y" [FAny $ Node _] FFloat) n
+
+getNData : Node a -> IO a
+getNData n = mkForeign (FFun ".data" [FAny $ Node _] (FAny _)) n
+
+putNData : Node a -> a -> IO ()
+putNData n d = mkForeign (FFun ".data=" [FAny $ Node _, FAny _] FUnit) n d
+
+data Link a b = MkLink Ptr
+
+mkLink : Node a -> Node a -> b -> IO (Link a b)
+mkLink src tgt d =
+  mkForeign
+    (FFun "mkLink" [FAny $ Node _, FAny $ Node _, FAny _] (FAny $ Link _ _))
+    src tgt d
+
+getSource : Link a b -> IO (Node a)
+getSource l = mkForeign (FFun ".source" [FAny $ Link _ _] (FAny $ Node _)) l
+
+getTarget : Link a b -> IO (Node a)
+getTarget l = mkForeign (FFun ".target" [FAny $ Link _ _] (FAny $ Node _)) l
+
+getLData : Link a b -> IO b
+getLData l = mkForeign (FFun ".data" [FAny $ Link _ _] (FAny _)) l
+
+putLData : Link a b -> b -> IO ()
+putLData l d = mkForeign (FFun ".data=" [FAny $ Link _ _, FAny _] FUnit) l d
+
+data ForceLayout a b = MkForceLayout Ptr
+
+mkForceLayout : Float -> Float -> IO (ForceLayout a b)
+mkForceLayout width height =
+  mkForeign
+    (FFun "mkForceLayout" [FFloat, FFloat] (FAny $ ForceLayout _ _))
+    width height
+
+getNodes : ForceLayout a b -> IO (Array $ Node a)
+getNodes fl =
+  mkForeign
+    (FFun ".nodes" [FAny $ ForceLayout _ _] (FAny $ Array $ Node _))
+    fl
+
+putNodes : ForceLayout a b -> Array (Node a) -> IO ()
+putNodes fl ns =
+  mkForeign
+    (FFun ".nodes" [FAny $ ForceLayout _ _, FAny $ Array $ Node _] FUnit)
+    fl ns
+
+getLinks : ForceLayout a b -> IO (Array $ Link a b)
+getLinks fl =
+  mkForeign
+    (FFun ".links" [FAny $ ForceLayout _ _] (FAny $ Array $ Link _ _))
+    fl
+
+putLinks : ForceLayout a b -> Array (Link a b) -> IO ()
+putLinks fl ls =
+  mkForeign
+    (FFun ".links" [FAny $ ForceLayout _ _, FAny $ Array $ Link _ _] FUnit)
+    fl ls
+
+getWidthL : ForceLayout a b -> IO Float
+getWidthL fl = mkForeign (FFun "getWidthL" [FAny $ ForceLayout _ _] FFloat) fl
+
+getHeightL : ForceLayout a b -> IO Float
+getHeightL fl = mkForeign (FFun "getHeightL" [FAny $ ForceLayout _ _] FFloat) fl
+
+chargeL : Float -> ForceLayout a b -> IO (ForceLayout a b)
+chargeL val fl =
+  mkForeign
+    (FFun ".charge" [FAny $ ForceLayout _ _, FFloat] (FAny $ ForceLayout _ _))
+    fl val
+
+linkDistanceL : Float -> ForceLayout a b -> IO (ForceLayout a b)
+linkDistanceL val fl =
+  mkForeign
+    (FFun
+       ".linkDistance"
+       [FAny $ ForceLayout _ _, FFloat]
+       (FAny $ ForceLayout _ _))
+    fl val
+
+onTickL : ForceLayout a b -> (() -> IO ()) -> IO ()
+onTickL fl h =
+  mkForeign (FFun "onTickL" [FAny $ ForceLayout _ _, FAny _] FUnit) fl h
+
+startL : ForceLayout a b -> IO ()
+startL fl =
+  mkForeign (FFun ".start" [FAny $ ForceLayout _ _, FUnit] FUnit) fl ()
+
+stopL : ForceLayout a b -> IO ()
+stopL fl =
+  mkForeign (FFun ".stop" [FAny $ ForceLayout _ _, FUnit] FUnit) fl ()
