@@ -30,15 +30,15 @@ var promptHelper = function (msg, mkNothing, mkJust) {
       return __IDR__.APPLY0(mkJust, result);
     });
   }
-}
+};
 
 var getNth = function (arr, i) {
   return arr[i];
-}
+};
 
 var setNth = function (arr, i, val) {
   arr[i] = val;
-}
+};
 
 var anyA = function (f, arr) {
   var res = arr.some(function (x) {
@@ -48,7 +48,7 @@ var anyA = function (f, arr) {
   });
 
   return res ? 1 : 0;
-}
+};
 
 var filterA = function (f, arr) {
   return arr.filter(function (x) {
@@ -56,11 +56,11 @@ var filterA = function (f, arr) {
       return __IDR__.APPLY0(f, x);
     });
   });
-}
+};
 
 var d3Root = function () {
   return window.d3;
-}
+};
 
 var attrPrime = function (sel, attr, f) {
   return sel.attr(attr, function (d, i) {
@@ -68,7 +68,7 @@ var attrPrime = function (sel, attr, f) {
       return __IDR__.APPLY0(__IDR__.APPLY0(f, d), i);
     });
   });
-}
+};
 
 var classedPrime = function (sel, cls, f) {
   return sel.classed(cls, function (d, i) {
@@ -76,7 +76,7 @@ var classedPrime = function (sel, cls, f) {
       return __IDR__.APPLY0(__IDR__.APPLY0(f, d), i);
     });
   });
-}
+};
 
 var stylePrime = function (sel, name, f) {
   return sel.style(name, function (d, i) {
@@ -84,7 +84,7 @@ var stylePrime = function (sel, name, f) {
       return __IDR__.APPLY0(__IDR__.APPLY0(f, d), i);
     });
   });
-}
+};
 
 var propertyPrime = function (sel, name, f) {
   return sel.property(name, function (d, i) {
@@ -92,7 +92,7 @@ var propertyPrime = function (sel, name, f) {
       return __IDR__.APPLY0(__IDR__.APPLY0(f, d), i);
     });
   });
-}
+};
 
 var textPrime = function (sel, f) {
   return sel.text(function (d, i) {
@@ -100,7 +100,7 @@ var textPrime = function (sel, f) {
       return __IDR__.APPLY0(__IDR__.APPLY0(f, d), i);
     });
   });
-}
+};
 
 var htmlPrime = function (sel, f) {
   return sel.html(function (d, i) {
@@ -108,7 +108,7 @@ var htmlPrime = function (sel, f) {
       return __IDR__.APPLY0(__IDR__.APPLY0(f, d), i);
     });
   });
-}
+};
 
 var bindPrime = function (sel, f) {
   return sel.data(function (d, i) {
@@ -116,7 +116,7 @@ var bindPrime = function (sel, f) {
       return __IDR__.APPLY0(__IDR__.APPLY0(f, d), i);
     });
   });
-}
+};
 
 var bindK = function (sel, arr, key) {
   return sel.data(arr, function (d, i) {
@@ -124,7 +124,7 @@ var bindK = function (sel, arr, key) {
       return __IDR__.APPLY0(__IDR__.APPLY0(key, d), i);
     });
   });
-}
+};
 
 var bindKPrime = function (sel, f, key) {
   return sel.data(
@@ -139,12 +139,12 @@ var bindKPrime = function (sel, f, key) {
       });
     }
   );
-}
+};
 
-function onClick(sel, handler) {
+var onClick = function (sel, handler) {
   sel.on("click", function () {
     return __IDRRT__.tailcall(function () {
       return __IDR__.APPLY0(handler, undefined);
     });
   });
-}
+};
