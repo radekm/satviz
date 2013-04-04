@@ -277,6 +277,12 @@ getSource l = mkForeign (FFun ".source" [FAny $ Link _ _] (FAny $ Node _)) l
 getTarget : Link a b -> IO (Node a)
 getTarget l = mkForeign (FFun ".target" [FAny $ Link _ _] (FAny $ Node _)) l
 
+getSrcTgt : Link a b -> IO (Node a, Node a)
+getSrcTgt l = do
+  src <- getSource l
+  tgt <- getTarget l
+  return (src, tgt)
+
 getLData : Link a b -> IO b
 getLData l = mkForeign (FFun ".data" [FAny $ Link _ _] (FAny _)) l
 
