@@ -294,8 +294,8 @@ mkForceLayout width height =
 getNodes : ForceLayout a b -> IO (Array $ Node a)
 getNodes fl =
   mkForeign
-    (FFun ".nodes" [FAny $ ForceLayout _ _] (FAny $ Array $ Node _))
-    fl
+    (FFun ".nodes" [FAny $ ForceLayout _ _, FUnit] (FAny $ Array $ Node _))
+    fl ()
 
 putNodes : ForceLayout a b -> Array (Node a) -> IO ()
 putNodes fl ns =
@@ -306,8 +306,8 @@ putNodes fl ns =
 getLinks : ForceLayout a b -> IO (Array $ Link a b)
 getLinks fl =
   mkForeign
-    (FFun ".links" [FAny $ ForceLayout _ _] (FAny $ Array $ Link _ _))
-    fl
+    (FFun ".links" [FAny $ ForceLayout _ _, FUnit] (FAny $ Array $ Link _ _))
+    fl ()
 
 putLinks : ForceLayout a b -> Array (Link a b) -> IO ()
 putLinks fl ls =
