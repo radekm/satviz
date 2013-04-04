@@ -12,3 +12,6 @@ f >=> g = \a => f a >>= g
 
 mapM_ : Monad m => (a -> m b) -> List a -> m ()
 mapM_ f = sequence_ . map f
+
+boolToInt : Bool -> Int
+boolToInt b = b ? 1 : 0
