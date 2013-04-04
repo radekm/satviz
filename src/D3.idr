@@ -66,19 +66,19 @@ arrayToList {a} xs = lengthA xs >>= loop [] . flip (-) 1
       else
         return acc
 
-anyA : {a : _} -> (a -> Bool) -> Array a -> IO Bool
+anyA : {a : _} -> (a -> IO Bool) -> Array a -> IO Bool
 anyA {a} f xs =
   pure (/= 0) <$> mkForeign (FFun "anyA" [FAny _, FAny $ Array _] FInt) f2 xs
   where
-    f2 : a -> Int
-    f2 x = (f x) ? 1 : 0
+    f2 : a -> IO Int
+    f2 x = [| boolToInt (f x) |]
 
-filterA : {a : _} -> (a -> Bool) -> Array a -> IO (Array a)
+filterA : {a : _} -> (a -> IO Bool) -> Array a -> IO (Array a)
 filterA {a} f xs =
   mkForeign (FFun "filterA" [FAny _, FAny $ Array _] (FAny $ Array _)) f2 xs
   where
-    f2 : a -> Int
-    f2 x = (f x) ? 1 : 0
+    f2 : a -> IO Int
+    f2 x = [| boolToInt (f x) |]
 
 -- ---------------------------------------------------------------------------
 -- Selecting elements

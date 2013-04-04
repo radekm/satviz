@@ -21,12 +21,12 @@ main = do
   getNth arr2 0 >>= print
 
   -- Prints: True, False
-  anyA (== 5) arr >>= print
-  anyA (== 3) arr >>= print
+  anyA (pure . (== 5)) arr >>= print
+  anyA (pure . (== 3)) arr >>= print
 
   -- Prints: [1, 2, 5, 6]
   --         [1, 2]
-  arr3 <- filterA (< 4) arr
+  arr3 <- filterA (pure . (< 4)) arr
   arrayToList arr >>= print
   arrayToList arr3 >>= print
 
