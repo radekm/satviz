@@ -367,3 +367,11 @@ startL fl =
 stopL : ForceLayout a b -> IO ()
 stopL fl =
   mkForeign (FFun ".stop" [FAny $ ForceLayout _ _, FUnit] FUnit) fl ()
+
+makeDraggableL : ForceLayout a b -> Sel c d -> IO (Sel c d)
+makeDraggableL fl sel =
+  mkForeign
+    (FFun "makeDraggableL"
+       [FAny $ Sel _ _, FAny $ ForceLayout _ _]
+       (FAny $ Sel _ _))
+    sel fl

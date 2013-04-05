@@ -55,6 +55,7 @@ main = do
                bind nodesArr
     nodes ?? enter >=>
       append "svg:text" >=>
+      makeDraggableL fl >=>
       text' (const . getNData)
 
     links <- linkLayer ?? selectAll "line" >=>

@@ -244,6 +244,7 @@ refreshImplGraphView
     circles ?? exit >=> remove
     circles ?? enter >=>
       append "svg:circle" >=>
+      makeDraggableL fl >=>
       attr "r" "5"
     circles ?? attr' "class" (const . (getNData >=> pure . litClass))
 

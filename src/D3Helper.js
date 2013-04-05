@@ -176,3 +176,7 @@ var onTickL = function (fl, handler) {
     });
   });
 };
+
+var makeDraggableL = function (sel, fl) {
+  return sel.call(fl.drag);
+};
