@@ -80,6 +80,21 @@ filterA {a} f xs =
     f2 : a -> IO Int
     f2 x = [| boolToInt (f x) |]
 
+findA : {a : _} -> (a -> IO Bool) -> Array a -> IO (Maybe a)
+findA {a} f xs = lengthA xs >>= loop 0
+  where
+    loop : Int -> Int -> IO (Maybe a)
+    loop i len =
+      if i < len then do
+        x <- getNth xs i
+        b <- f x
+        if b then
+          return $ Just x
+        else
+          loop (i + 1) len
+      else
+        return Nothing
+
 -- ---------------------------------------------------------------------------
 -- Selecting elements
 
