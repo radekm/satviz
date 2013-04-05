@@ -112,3 +112,38 @@ ul.assigView li.forced {
   background-color: #33cc66;
   border: 1px solid #009933;
 }
+
+svg.implGraphView {
+  position: absolute;
+  left: 480px;
+  top: 4px;
+  border: 1px solid blue;
+}
+
+svg.implGraphView line {
+  stroke: #000;
+  stroke-width: 1px;
+}
+
+svg.implGraphView circle.decided {
+  stroke: #777;
+  stroke-width: 1px;
+  fill: #aaa;
+}
+
+svg.implGraphView circle.forced {
+  stroke: #009933;
+  stroke-width: 1px;
+  fill: #33cc66;
+}
+
+svg.implGraphView text {
+  font: 14px;
+  pointer-events: none;
+}
+
+svg.implGraphView text.shadow {
+  stroke: #fff;
+  stroke-width: 3px;
+  stroke-opacity: 0.8;
+}

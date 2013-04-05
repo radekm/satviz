@@ -154,6 +154,183 @@ refreshAssigView (MkAssigView v) clauses trail = do
     litClass (_, Just _, _) = "forced"
 
 -- ---------------------------------------------------------------------------
+-- Implication graph view
+
+data ImplGraphView
+  = MkImplGraphView
+      (ForceLayout Lit ())
+      (Sel NoData NoData) -- Link layer.
+      (Sel NoData NoData) -- Node layer.
+      (Sel NoData NoData) -- Text layer.
+
+createImplGraphView : String -> Float -> Float -> Sel a b -> IO ImplGraphView
+createImplGraphView cssClass width height parent = do
+
+  svg <- parent ?? append "svg" >=>
+           forgetBoundData >=>
+           attr "width" (show width) >=>
+           attr "height" (show height) >=>
+           classed cssClass True
+
+  svg ?? append "svg:defs" >=>
+    append "svg:marker" >=>
+    attr "id" "arrow" >=>
+    attr "viewBox" "0 -4 9 8" >=>
+    attr "refX" "13" >=>
+    attr "markerWidth" "9" >=>
+    attr "markerHeight" "8" >=>
+    attr "orient" "auto" >=>
+    append "svg:path" >=>
+    attr "d" "M0 -4 L9 0 L0 4"
+
+  [| MkImplGraphView
+       (mkForceLayout width height >>=
+          linkDistanceL 100 >>=
+          chargeL (-300))
+       (svg ?? append "svg:g")
+       (svg ?? append "svg:g")
+       (svg ?? append "svg:g")
+  |]
+
+refreshImplGraphView : ImplGraphView -> List Clause -> Trail -> IO ()
+refreshImplGraphView
+  (MkImplGraphView fl linkLayer nodeLayer textLayer)
+  clauses
+  trail = do
+
+    stopL fl
+
+    x <- getWidthL fl
+    y <- (/ 2) `fmap` getHeightL fl
+
+    --
+    -- Update arrays with nodes and links.
+    --
+
+    -- Remove old nodes and links.
+    nodes <- getNodes fl >>= filterA (getNData >=> pure . litInModel)
+    links <- getLinks fl >>=
+               filterA (getSrcTgtLits >=>
+                        mapTupleM (litInView nodes) >=>
+                        pure . uncurry (&&))
+
+    -- Add new nodes.
+    newLits <- filterM (litInView nodes >=> pure . not)
+                 $ map toLit trail
+    mapM_ (mkNode x y >=> pushA nodes) newLits
+
+    -- Add new links.
+    newEdges <- filterM (edgeInView links >=> pure . not)
+                  $ concatMap edgesLeadingToLit trail
+    mapM_
+      (mapTupleM (findNode nodes) >=>
+         flip (uncurry mkLink) () >=>
+         pushA links)
+      newEdges
+
+    putNodes fl nodes
+    putLinks fl links
+
+    --
+    -- Bind arrays.
+    --
+
+    lines <- linkLayer ?? selectAll "line" >=>
+               bindK links (const . linkKey)
+    lines ?? exit >=> remove
+    lines ?? enter >=>
+      append "svg:line" >=>
+      attr "marker-end" "url(#arrow)"
+
+    circles <- nodeLayer ?? selectAll "circle" >=>
+                 bindK nodes (const . nodeKey)
+    circles ?? exit >=> remove
+    circles ?? enter >=>
+      append "svg:circle" >=>
+      attr "r" "5"
+    circles ?? attr' "class" (const . (getNData >=> pure . litClass))
+
+    textGroups <- textLayer ?? selectAll "g" >=>
+                    bindK nodes (const . nodeKey)
+    textGroups ?? exit >=> remove
+    newTextGroups <- textGroups ?? enter >=> append "svg:g"
+
+    -- Shadow.
+    newTextGroups ?? append "svg:text" >=>
+      attr "class" "shadow" >=>
+      text' (const . (getNData >=> decodeEntities . litToHtml))
+
+    -- Text.
+    newTextGroups ?? append "svg:text" >=>
+      text' (const . (getNData >=> decodeEntities . litToHtml))
+
+    labels <- textGroups ?? selectAll "text" >=>
+                forgetBoundData >=>
+                castBoundData
+
+    --
+    -- Tick handler.
+    --
+
+    fl `onTickL` tickHandler lines circles labels
+
+    startL fl
+  where
+    toLit : (Lit, Maybe Ante, Level) -> Lit
+    toLit (lit, _, _) = lit
+    litInModel : Lit -> Bool
+    litInModel lit = isJust $ find ((== lit) . toLit) trail
+    litInView : Array (Node Lit) -> Lit -> IO Bool
+    litInView ns l = anyA (getNData >=> pure . (== l)) ns
+    edgesLeadingToLit : (Lit, Maybe Ante, Level) -> List (Lit, Lit)
+    edgesLeadingToLit (_, Nothing, _) = []
+    edgesLeadingToLit (lit, Just cid, _) =
+      -- Source literal is negated since it is assigned false.
+      map (\l => (negLit l, lit))
+        -- No edge from itself.
+        $ filter (/= lit)
+        $ getLits
+        $ findClause cid clauses
+    getSrcTgtLits : Link Lit () -> IO (Lit, Lit)
+    getSrcTgtLits = getSrcTgt >=> mapTupleM getNData
+    edgeInView : Array (Link Lit ()) -> (Lit, Lit) -> IO Bool
+    edgeInView ls e = anyA (getSrcTgtLits >=> pure . (== e)) ls
+    findNode : Array (Node Lit) -> Lit -> IO (Node Lit)
+    findNode ns l =
+      fromJust `fmap` findA (getNData >=> pure . (== l)) ns
+
+    linkKey : Link Lit () -> IO String
+    linkKey link = do
+      (l, l') <- getSrcTgtLits link
+      return $ show l ++ "--->" ++ show l'
+    nodeKey : Node Lit -> IO String
+    nodeKey = getNData >=> pure . show
+    litClass : Lit -> String
+    litClass (MkLit _ v) = case findInTrail v trail of
+                             Just (_, Nothing, _) => "decided"
+                             Just (_, Just _, _) => "forced"
+                             Nothing => "error"
+
+    tickHandler :
+      Sel NoData (Link Lit ()) ->
+      Sel NoData (Node Lit) ->
+      Sel NoData (Node Lit) ->
+      () -> IO ()
+    tickHandler lines circles labels () = do
+      lines ??
+        attr' "x1" (const . (getSource >=> getX >=> pure . show)) >=>
+        attr' "y1" (const . (getSource >=> getY >=> pure . show)) >=>
+        attr' "x2" (const . (getTarget >=> getX >=> pure . show)) >=>
+        attr' "y2" (const . (getTarget >=> getY >=> pure . show))
+      circles ??
+        attr' "cx" (const . (getX >=> pure . show)) >=>
+        attr' "cy" (const . (getY >=> pure . show))
+      labels ??
+        attr' "x" (const . (getX >=> pure . show . (+ 8))) >=>
+        attr' "y" (const . (getY >=> pure . show . (+ 8)))
+      return ()
+
+-- ---------------------------------------------------------------------------
 
 record State : Type where
   MkState :
@@ -162,6 +339,7 @@ record State : Type where
     (stMsgView : MsgView) ->
     (stClauseView : ClauseView) ->
     (stAssigView : AssigView) ->
+    (stImplGraphView : ImplGraphView) ->
     (stAddClauseBtn : Sel NoData NoData) ->
     (stStartVisBtn : Sel NoData NoData) ->
     (stNextBtn : Sel NoData NoData) ->
@@ -214,6 +392,10 @@ next r = do
         (stAssigView s)
         (sClauses $ stSol s)
         (sTrail $ stSol s)
+      refreshImplGraphView
+        (stImplGraphView s)
+        (sClauses $ stSol s)
+        (sTrail $ stSol s)
       procAlgoResult (resume (stSol s) k) r
 
 init : Sel NoData NoData -> IO ()
@@ -223,6 +405,8 @@ init parent = do
   clauseView <- parent ?? createClauseView "clauseView"
 
   assigView <- parent ?? createAssigView "assigView"
+
+  implGraphView <- parent ?? createImplGraphView "implGraphView" 600 418
 
   addClauseBtn <- parent ?? append "input" >=>
                     classed "addClauseBtn" True >=>
@@ -240,6 +424,7 @@ init parent = do
          msgView
          clauseView
          assigView
+         implGraphView
          addClauseBtn
          startVisBtn
          d3 -- Dummy.
