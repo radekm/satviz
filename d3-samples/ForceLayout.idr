@@ -9,13 +9,11 @@ main : IO ()
 main = do
     let width = 400
     let height = 300
-    let x = width
-    let y = height / 2
 
-    a <- mkNode x y "a"
-    b <- mkNode x y "b"
-    c <- mkNode x y "c"
-    d <- mkNode x y "d"
+    a <- mkNode "a"
+    b <- mkNode "b"
+    c <- mkNode "c"
+    d <- mkNode "d"
     nodesArr <- mkArray [a, b, c, d]
 
     ab <- mkLink a b ()

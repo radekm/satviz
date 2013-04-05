@@ -200,9 +200,6 @@ refreshImplGraphView
 
     stopL fl
 
-    x <- getWidthL fl
-    y <- (/ 2) `fmap` getHeightL fl
-
     --
     -- Update arrays with nodes and links.
     --
@@ -217,7 +214,7 @@ refreshImplGraphView
     -- Add new nodes.
     newLits <- filterM (litInView nodes >=> pure . not)
                  $ map toLit trail
-    mapM_ (mkNode x y >=> pushA nodes) newLits
+    mapM_ (mkNode >=> pushA nodes) newLits
 
     -- Add new links.
     newEdges <- filterM (edgeInView links >=> pure . not)

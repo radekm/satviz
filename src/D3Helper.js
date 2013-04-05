@@ -149,8 +149,8 @@ var onClick = function (sel, handler) {
   });
 };
 
-var mkNode = function (x, y, d) {
-  return { x : x, y : y, data : d };
+var mkNode = function (d) {
+  return { data : d };
 };
 
 var mkLink = function (src, tgt, d) {

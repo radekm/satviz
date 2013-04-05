@@ -262,9 +262,8 @@ onClick sel h =
 
 data Node a = MkNode Ptr
 
-mkNode : Float -> Float -> a -> IO (Node a)
-mkNode x y d =
-  mkForeign (FFun "mkNode" [FFloat, FFloat, FAny _] (FAny $ Node _)) x y d
+mkNode : a -> IO (Node a)
+mkNode d = mkForeign (FFun "mkNode" [FAny _] (FAny $ Node _)) d
 
 getX : Node a -> IO Float
 getX n = mkForeign (FFun ".x" [FAny $ Node _] FFloat) n
