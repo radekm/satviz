@@ -293,27 +293,19 @@ solve = do
 -- ---------------------------------------------------------------------------
 -- Parser
 
-asciiAlpha : List Char
-asciiAlpha = map chr $ [ord 'A' .. ord 'Z'] ++ [ord 'a' .. ord 'z']
-  where
-    chr = prim__intToChar
-    ord = prim__charToInt
-
-asciiAlphaNum : List Char
-asciiAlphaNum = map chr [ord '0' .. ord '9'] ++ asciiAlpha
-  where
-    chr = prim__intToChar
-    ord = prim__charToInt
-
-whitespace : List Char
-whitespace = unpack " \t\n\r"
+whitespace : Char -> Bool
+whitespace c = c == ' ' || c == '\t' || c == '\n' || c == '\r'
 
 asciiIdent : String -> Bool
 asciiIdent s with (unpack s)
   asciiIdent _ | [] = False
-  asciiIdent _ | (x :: xs) =
-    (x `elem` ('_' :: asciiAlpha)) &&
-    (all (flip List.elem ('_' :: asciiAlphaNum)) xs)
+  asciiIdent _ | (x :: xs) = asciiAlphaUsc x && all asciiAlphaNumUsc xs
+  where
+    asciiAlphaUsc : Char -> Bool
+    asciiAlphaUsc c =
+      (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_'
+    asciiAlphaNumUsc : Char -> Bool
+    asciiAlphaNumUsc c = asciiAlphaUsc c || (c >= '0' && c <= '9')
 
 parseLit' : List Char -> Either String Lit
 parseLit' str =
@@ -325,7 +317,7 @@ parseLit' str =
         Right lit
   where
     str' : List Char
-    str' = filter (not . flip List.elem whitespace) str
+    str' = filter (not . whitespace) str
     lit : Lit
     lit =
       case str' of
@@ -336,15 +328,17 @@ parseLit' str =
 -- Tolerates literal separator after the last literal.
 parseLits' : List Char -> Either String (List Lit)
 parseLits' str =
-  if all (flip List.elem whitespace) str then
+  if all whitespace str then
     Right []
   else
-    let litSep = flip List.elem $ unpack ",|;" in
     let (litStr, restStr) = break litSep str in
     case (parseLit' litStr, parseLits' $ drop 1 restStr) of
       (Left err, _) => Left err
       (_, Left err) => Left err
       (Right l, Right ls) => Right $ l :: ls
+  where
+    litSep : Char -> Bool
+    litSep c = c == ',' || c == '|' || c == ';'
 
 parseLit : String -> Either String Lit
 parseLit = parseLit' . unpack
