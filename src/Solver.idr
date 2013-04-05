@@ -95,6 +95,10 @@ Assignment = Lit -> LBool
 emptySol : Sol
 emptySol = MkSol [] 0 []
 
+negLit : Lit -> Lit
+negLit (MkLit Pos l) = MkLit Neg l
+negLit (MkLit Neg l) = MkLit Pos l
+
 getLits : Clause -> List Lit
 getLits (MkClause _ lits) = lits
 
