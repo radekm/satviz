@@ -156,9 +156,27 @@ refreshAssigView (MkAssigView v) clauses trail = do
 -- ---------------------------------------------------------------------------
 -- Implication graph view
 
+data Vertex
+  = VLit Lit
+
+instance Eq Vertex where
+  (VLit l) == (VLit l') = l == l'
+
+instance Show Vertex where
+  show (VLit l) = show l
+
+Edge : Type
+Edge = (Vertex, Vertex)
+
+getVertex : Node Vertex -> IO Vertex
+getVertex = getNData
+
+getEdge : Link Vertex () -> IO Edge
+getEdge = getSrcTgt >=> mapTupleM getVertex
+
 data ImplGraphView
   = MkImplGraphView
-      (ForceLayout Lit ())
+      (ForceLayout Vertex ())
       (Sel NoData NoData) -- Link layer.
       (Sel NoData NoData) -- Node layer.
       (Sel NoData NoData) -- Text layer.
@@ -205,16 +223,16 @@ refreshImplGraphView
     --
 
     -- Remove old nodes and links.
-    nodes <- getNodes fl >>= filterA (getNData >=> pure . litInModel)
+    nodes <- getNodes fl >>= filterA (getVertex >=> pure . vertInModel)
     links <- getLinks fl >>=
-               filterA (getSrcTgtLits >=>
-                        mapTupleM (litInView nodes) >=>
+               filterA (getEdge >=>
+                        mapTupleM (vertInView nodes) >=>
                         pure . uncurry (&&))
 
     -- Add new nodes.
-    newLits <- filterM (litInView nodes >=> pure . not)
-                 $ map toLit trail
-    mapM_ (mkNode >=> pushA nodes) newLits
+    newVertices <- filterM (vertInView nodes >=> pure . not)
+                     $ map toVert trail
+    mapM_ (mkNode >=> pushA nodes) newVertices
 
     -- Add new links.
     newEdges <- filterM (edgeInView links >=> pure . not)
@@ -246,7 +264,7 @@ refreshImplGraphView
       append "svg:circle" >=>
       makeDraggableL fl >=>
       attr "r" "5"
-    circles ?? attr' "class" (const . (getNData >=> pure . litClass))
+    circles ?? attr' "class" (const . (getVertex >=> pure . vertClass))
 
     textGroups <- textLayer ?? selectAll "g" >=>
                     bindK nodes (const . nodeKey)
@@ -256,11 +274,11 @@ refreshImplGraphView
     -- Shadow.
     newTextGroups ?? append "svg:text" >=>
       attr "class" "shadow" >=>
-      text' (const . (getNData >=> decodeEntities . litToHtml))
+      text' (const . (getVertex >=> vertLabel))
 
     -- Text.
     newTextGroups ?? append "svg:text" >=>
-      text' (const . (getNData >=> decodeEntities . litToHtml))
+      text' (const . (getVertex >=> vertLabel))
 
     labels <- textGroups ?? selectAll "text" >=>
                 forgetBoundData >=>
@@ -274,45 +292,45 @@ refreshImplGraphView
 
     startL fl
   where
-    toLit : (Lit, Maybe Ante, Level) -> Lit
-    toLit (lit, _, _) = lit
-    litInModel : Lit -> Bool
-    litInModel lit = isJust $ find ((== lit) . toLit) trail
-    litInView : Array (Node Lit) -> Lit -> IO Bool
-    litInView ns l = anyA (getNData >=> pure . (== l)) ns
-    edgesLeadingToLit : (Lit, Maybe Ante, Level) -> List (Lit, Lit)
+    toVert : (Lit, Maybe Ante, Level) -> Vertex
+    toVert (lit, _, _) = VLit lit
+    vertInModel : Vertex -> Bool
+    vertInModel v = isJust $ find ((== v) . toVert) trail
+    vertInView : Array (Node Vertex) -> Vertex -> IO Bool
+    vertInView ns v = anyA (getVertex >=> pure . (== v)) ns
+    edgesLeadingToLit : (Lit, Maybe Ante, Level) -> List Edge
     edgesLeadingToLit (_, Nothing, _) = []
     edgesLeadingToLit (lit, Just cid, _) =
       -- Source literal is negated since it is assigned false.
-      map (\l => (negLit l, lit))
+      map (\l => (VLit $ negLit l, VLit lit))
         -- No edge from itself.
         $ filter (/= lit)
         $ getLits
         $ findClause cid clauses
-    getSrcTgtLits : Link Lit () -> IO (Lit, Lit)
-    getSrcTgtLits = getSrcTgt >=> mapTupleM getNData
-    edgeInView : Array (Link Lit ()) -> (Lit, Lit) -> IO Bool
-    edgeInView ls e = anyA (getSrcTgtLits >=> pure . (== e)) ls
-    findNode : Array (Node Lit) -> Lit -> IO (Node Lit)
-    findNode ns l =
-      fromJust `fmap` findA (getNData >=> pure . (== l)) ns
+    edgeInView : Array (Link Vertex ()) -> Edge -> IO Bool
+    edgeInView ls e = anyA (getEdge >=> pure . (== e)) ls
+    findNode : Array (Node Vertex) -> Vertex -> IO (Node Vertex)
+    findNode ns v =
+      fromJust `fmap` findA (getVertex >=> pure . (== v)) ns
 
-    linkKey : Link Lit () -> IO String
+    linkKey : Link Vertex () -> IO String
     linkKey link = do
-      (l, l') <- getSrcTgtLits link
-      return $ show l ++ "--->" ++ show l'
-    nodeKey : Node Lit -> IO String
-    nodeKey = getNData >=> pure . show
-    litClass : Lit -> String
-    litClass (MkLit _ v) = case findInTrail v trail of
-                             Just (_, Nothing, _) => "decided"
-                             Just (_, Just _, _) => "forced"
-                             Nothing => "error"
+      (v, v') <- getEdge link
+      return $ show v ++ "--->" ++ show v'
+    nodeKey : Node Vertex -> IO String
+    nodeKey = getVertex >=> pure . show
+    vertClass : Vertex -> String
+    vertClass (VLit (MkLit _ var)) = case findInTrail var trail of
+                                       Just (_, Nothing, _) => "decided"
+                                       Just (_, Just _, _) => "forced"
+                                       Nothing => "error"
+    vertLabel : Vertex -> IO String
+    vertLabel (VLit l) = decodeEntities $ litToHtml l
 
     tickHandler :
-      Sel NoData (Link Lit ()) ->
-      Sel NoData (Node Lit) ->
-      Sel NoData (Node Lit) ->
+      Sel NoData (Link Vertex ()) ->
+      Sel NoData (Node Vertex) ->
+      Sel NoData (Node Vertex) ->
       () -> IO ()
     tickHandler lines circles labels () = do
       lines ??
