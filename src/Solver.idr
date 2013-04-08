@@ -63,17 +63,29 @@ Ante = CId
 Trail : Type
 Trail = List (Lit, Maybe Ante, Level)
 
+data Operation
+  = OOther
+  -- Current conflict clause, original conflict clause, processed variables.
+  | OLearn (List Lit) Clause (List Var)
+
 -- Solver state.
 record Sol : Type where
   MkSol : (sClauses : List Clause) ->
           (sLevel : Level) ->
           (sTrail : Trail) ->
+          (sOp : Operation) ->
           Sol
 
 data Event
   = EDecide Lit
   | EProp Lit Clause
   | EConfl Clause
+  | EAnalyzeStart Clause
+  -- Variable to be resolved on, current conflict clause,
+  -- antecedent clause of the variable, resolvent.
+  | EResolve Var (List Lit) Clause (List Lit)
+  | ESkip Var (List Lit) Clause
+  | EAnalyzeEnd (List Lit)
   | ELearn Clause
   | EBacktrack Lit (Maybe Clause)
 
@@ -93,7 +105,7 @@ Assignment : Type
 Assignment = Lit -> LBool
 
 emptySol : Sol
-emptySol = MkSol [] 0 []
+emptySol = MkSol [] 0 [] OOther
 
 negLit : Lit -> Lit
 negLit (MkLit Pos l) = MkLit Neg l
@@ -205,30 +217,40 @@ isAsserting lits level trail = (List.length $ filter (== level) levels) == 1
 -- Returns a learned clause.
 -- If decision level > 0 then the learned clause is nonempty.
 analyzeConflict : Clause -> SatAlgo r Clause
-analyzeConflict (MkClause _ conflLits) = do
+analyzeConflict conflClause = do
+    let conflLits = getLits conflClause
     s <- get
-    assertingLits <- resolve s (sTrail s) conflLits
+    put (record { sOp = OLearn conflLits conflClause [] } s)
+    interrupt $ EAnalyzeStart conflClause
+    assertingLits <- resolve s (sTrail s) conflLits []
+    put (record { sOp = OOther } s)
+    interrupt $ EAnalyzeEnd assertingLits
     addClause assertingLits
   where
     partial
-    resolve : Sol -> Trail -> List Lit -> SatAlgo r (List Lit)
-    resolve s trail lits =
+    resolve : Sol -> Trail -> List Lit -> List Var -> SatAlgo r (List Lit)
+    resolve s trail lits procVars =
       if isAsserting lits (sLevel s) (sTrail s) then
         return lits
       else
         case trail of
           (MkLit _ var, Just ante, _) :: ts => do
-            if find (\(MkLit _ v) => v == var) lits == Nothing then
-              resolve s ts lits
+            let procVars' = var :: procVars
+            let anteCl = findClause ante $ sClauses s
+            if find (\(MkLit _ v) => v == var) lits == Nothing then do
+              put (record { sOp = OLearn lits conflClause procVars' } s)
+              interrupt $ ESkip var lits anteCl
+              resolve s ts lits procVars'
             -- var is among lits, so we resolve it out.
             else do
-              let anteCl = findClause ante $ sClauses s
               let anteLits = getLits anteCl
               let resolvent =
                 List.nub
                   $ filter (\(MkLit _ v) => v /= var)
                   $ lits ++ anteLits
-              resolve s ts resolvent
+              put (record { sOp = OLearn resolvent conflClause procVars' } s)
+              interrupt $ EResolve var lits anteCl resolvent
+              resolve s ts resolvent procVars'
           -- missing case: []
 
 -- Assumes that every literal in the clause is assigned.

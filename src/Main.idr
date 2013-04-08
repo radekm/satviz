@@ -29,12 +29,15 @@ litToHtml : Lit -> String
 litToHtml (MkLit Pos lit) = lit
 litToHtml (MkLit Neg lit) = "&#172;" ++ lit
 
-clauseToHtml : Clause -> String
-clauseToHtml (MkClause _ lits) =
+clauseToHtml' : List Lit -> String
+clauseToHtml' lits =
   case lits of
     [] => "&#9633;"
     l :: ls =>
       litToHtml l ++ mconcat (map (\l' => " &#8744; " ++ litToHtml l') ls)
+
+clauseToHtml : Clause -> String
+clauseToHtml (MkClause _ lits) = clauseToHtml' lits
 
 -- ---------------------------------------------------------------------------
 -- Message view
@@ -158,12 +161,16 @@ refreshAssigView (MkAssigView v) clauses trail = do
 
 data Vertex
   = VLit Lit
+  | VConfl
 
 instance Eq Vertex where
   (VLit l) == (VLit l') = l == l'
+  VConfl   == VConfl    = True
+  _        == _         = False
 
 instance Show Vertex where
   show (VLit l) = show l
+  show VConfl = "?K"
 
 Edge : Type
 Edge = (Vertex, Vertex)
@@ -190,9 +197,7 @@ createImplGraphView cssClass width height parent = do
            attr "height" (show height) >=>
            classed cssClass True
 
-  svg ?? append "svg:defs" >=>
-    append "svg:marker" >=>
-    attr "id" "arrow" >=>
+  let setupMarker =
     attr "viewBox" "0 -4 9 8" >=>
     attr "refX" "13" >=>
     attr "markerWidth" "9" >=>
@@ -200,6 +205,19 @@ createImplGraphView cssClass width height parent = do
     attr "orient" "auto" >=>
     append "svg:path" >=>
     attr "d" "M0 -4 L9 0 L0 4"
+
+  defs <- svg ?? append "svg:defs"
+  defs ?? append "svg:marker" >=>
+    attr "id" "arrow" >=>
+    setupMarker
+  defs ?? append "svg:marker" >=>
+    attr "id" "arrowCut" >=>
+    attr "fill" "#00f" >=>
+    setupMarker
+  defs ?? append "svg:marker" >=>
+    attr "id" "arrowProc" >=>
+    attr "fill" "#cc0000" >=>
+    setupMarker
 
   [| MkImplGraphView
        (mkForceLayout width height >>=
@@ -210,11 +228,17 @@ createImplGraphView cssClass width height parent = do
        (svg ?? append "svg:g")
   |]
 
-refreshImplGraphView : ImplGraphView -> List Clause -> Trail -> IO ()
+refreshImplGraphView :
+  ImplGraphView ->
+  List Clause ->
+  Trail ->
+  Operation ->
+  IO ()
 refreshImplGraphView
   (MkImplGraphView fl linkLayer nodeLayer textLayer)
   clauses
-  trail = do
+  trail
+  operation = do
 
     stopL fl
 
@@ -233,6 +257,7 @@ refreshImplGraphView
     newVertices <- filterM (vertInView nodes >=> pure . not)
                      $ map toVert trail
     mapM_ (mkNode >=> pushA nodes) newVertices
+    addConfl nodes
 
     -- Add new links.
     newEdges <- filterM (edgeInView links >=> pure . not)
@@ -242,6 +267,7 @@ refreshImplGraphView
          flip (uncurry mkLink) () >=>
          pushA links)
       newEdges
+    addLinksToConfl nodes links
 
     putNodes fl nodes
     putLinks fl links
@@ -253,9 +279,11 @@ refreshImplGraphView
     lines <- linkLayer ?? selectAll "line" >=>
                bindK links (const . linkKey)
     lines ?? exit >=> remove
-    lines ?? enter >=>
-      append "svg:line" >=>
-      attr "marker-end" "url(#arrow)"
+    lines ?? enter >=> append "svg:line"
+    lines ??
+      attr' "class" (const . (getEdge >=> pure . edgeClass)) >=>
+      attr' "marker-end" (const . (getEdge >=> pure . edgeMarkerEnd)) >=>
+      attr' "stroke-dasharray" (const . (getEdge >=> pure . edgeDashArray))
 
     circles <- nodeLayer ?? selectAll "circle" >=>
                  bindK nodes (const . nodeKey)
@@ -295,7 +323,11 @@ refreshImplGraphView
     toVert : (Lit, Maybe Ante, Level) -> Vertex
     toVert (lit, _, _) = VLit lit
     vertInModel : Vertex -> Bool
-    vertInModel v = isJust $ find ((== v) . toVert) trail
+    vertInModel v = case v of
+                      VLit _ => isJust $ find ((== v) . toVert) trail
+                      VConfl => case operation of
+                                  OLearn _ _ _ => True
+                                  _ => False
     vertInView : Array (Node Vertex) -> Vertex -> IO Bool
     vertInView ns v = anyA (getVertex >=> pure . (== v)) ns
     edgesLeadingToLit : (Lit, Maybe Ante, Level) -> List Edge
@@ -312,6 +344,25 @@ refreshImplGraphView
     findNode : Array (Node Vertex) -> Vertex -> IO (Node Vertex)
     findNode ns v =
       fromJust `fmap` findA (getVertex >=> pure . (== v)) ns
+    addConfl : Array (Node Vertex) -> IO ()
+    addConfl ns = do
+      inView <- vertInView ns VConfl
+      if not inView && vertInModel VConfl then
+        mkNode VConfl >>= pushA ns
+      else
+        return ()
+    addLinksToConfl : Array (Node Vertex) -> Array (Link Vertex ()) -> IO ()
+    addLinksToConfl ns ls =
+      case operation of
+        OLearn _ (MkClause _ lits) _ => do
+          newEdges <- filterM (edgeInView ls >=> pure . not)
+                        $ map (\l => (VLit $ negLit l, VConfl)) lits
+          mapM_
+            (mapTupleM (findNode ns) >=>
+               flip (uncurry mkLink) () >=>
+               pushA ls)
+            newEdges
+        _ => return ()
 
     linkKey : Link Vertex () -> IO String
     linkKey link = do
@@ -319,13 +370,53 @@ refreshImplGraphView
       return $ show v ++ "--->" ++ show v'
     nodeKey : Node Vertex -> IO String
     nodeKey = getVertex >=> pure . show
+    isInConflClause : List Lit -> Vertex -> Bool
+    isInConflClause _ VConfl = False
+    isInConflClause conflCl (VLit (MkLit _ var)) =
+      isJust $ find (\(MkLit _ v) => v == var) conflCl
+    isProc : List Var -> Vertex -> Bool
+    isProc _ VConfl = True
+    isProc vars (VLit (MkLit _ var)) = isJust $ find (== var) vars
+    edgeCase : String -> String -> String -> Edge -> String
+    edgeCase normal cut proc (src, tgt) =
+      case operation of
+        OLearn conflCl _ vars =>
+          if isProc vars src then
+            proc
+          else if isInConflClause conflCl src && isProc vars tgt then
+            cut
+          else
+            normal
+        _ => normal
+    edgeCase _ _ _ (VConfl, _) = "error"
+    edgeClass : Edge -> String
+    edgeClass = edgeCase "" "cut" "proc"
+    edgeMarkerEnd : Edge -> String
+    edgeMarkerEnd = edgeCase "url(#arrow)" "url(#arrowCut)" "url(#arrowProc)"
+    edgeDashArray : Edge -> String
+    edgeDashArray = edgeCase "" "" "4, 4"
     vertClass : Vertex -> String
-    vertClass (VLit (MkLit _ var)) = case findInTrail var trail of
-                                       Just (_, Nothing, _) => "decided"
-                                       Just (_, Just _, _) => "forced"
-                                       Nothing => "error"
+    vertClass (VLit (MkLit s var)) = cls ++ opCls
+      where
+        v : Vertex
+        v = VLit $ MkLit s var
+        cls = case findInTrail var trail of
+                Just (_, Nothing, _) => "decided"
+                Just (_, Just _, _) => "forced"
+                Nothing => "error"
+        opCls = case operation of
+                  OLearn conflCl _ vars =>
+                    if isProc vars v then
+                      " proc"
+                    else if isInConflClause conflCl v then
+                      " inConflClause"
+                    else
+                      ""
+                  _ => ""
+    vertClass VConfl = "conflVertex"
     vertLabel : Vertex -> IO String
     vertLabel (VLit l) = decodeEntities $ litToHtml l
+    vertLabel VConfl = return "K"
 
     tickHandler :
       Sel NoData (Link Vertex ()) ->
@@ -386,6 +477,23 @@ procAlgoResult algoRes r = do
           putMsg $ "Conflict clause "
             ++ clauseToHtml cl
             ++ " detected"
+        EAnalyzeStart cl =>
+          putMsg $ "Analysis: make asserting clause "
+            ++ "from current conflict clause " ++ clauseToHtml cl
+        EResolve v conflCl anteCl resolvent =>
+          putMsg $ "Analysis: Resolve current conflict clause "
+            ++ clauseToHtml' conflCl
+            ++ " with " ++ clauseToHtml anteCl
+            ++ " on variable " ++ v
+            ++ " and form new conflict clause "
+            ++ clauseToHtml' resolvent
+        ESkip v conflCl anteCl =>
+          putMsg $ "Analysis: variable "
+            ++ v ++ " is not present in current conflict clause "
+            ++ clauseToHtml' conflCl
+        EAnalyzeEnd cl =>
+          putMsg $ "Analysis: found asserting clause "
+            ++ clauseToHtml' cl
         ELearn cl =>
           putMsg $ "Learning: add asserting clause "
             ++ clauseToHtml cl
@@ -412,6 +520,7 @@ next r = do
         (stImplGraphView s)
         (sClauses $ stSol s)
         (sTrail $ stSol s)
+        (sOp $ stSol s)
       procAlgoResult (resume (stSol s) k) r
 
 init : Sel NoData NoData -> IO ()

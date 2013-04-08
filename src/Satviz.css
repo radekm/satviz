@@ -125,6 +125,14 @@ svg.implGraphView line {
   stroke-width: 1px;
 }
 
+svg.implGraphView line.cut {
+  stroke: #00f;
+}
+
+svg.implGraphView line.proc {
+  stroke: #cc0000;
+}
+
 svg.implGraphView circle.decided {
   stroke: #777;
   stroke-width: 1px;
@@ -135,6 +143,20 @@ svg.implGraphView circle.forced {
   stroke: #009933;
   stroke-width: 1px;
   fill: #33cc66;
+}
+
+svg.implGraphView circle.inConflClause {
+  stroke: #00f;
+}
+
+svg.implGraphView circle.proc {
+  stroke: #cc0000;
+}
+
+svg.implGraphView circle.conflVertex {
+  stroke: #cc0000;
+  stroke-width: 1px;
+  fill: #ff3333;
 }
 
 svg.implGraphView text {
