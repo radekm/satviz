@@ -44,7 +44,6 @@ instance Show Lit where
   show (MkLit Pos lit) = lit
   show (MkLit Neg lit) = strCons '~' lit
 
--- Fay does not support newtype.
 data CId = MkCId Nat
 
 instance Eq CId where
