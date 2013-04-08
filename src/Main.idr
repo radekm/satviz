@@ -199,7 +199,7 @@ createImplGraphView cssClass width height parent = do
 
   let setupMarker =
     attr "viewBox" "0 -4 9 8" >=>
-    attr "refX" "13" >=>
+    attr "refX" "16" >=>
     attr "markerWidth" "9" >=>
     attr "markerHeight" "8" >=>
     attr "orient" "auto" >=>
@@ -291,7 +291,7 @@ refreshImplGraphView
     circles ?? enter >=>
       append "svg:circle" >=>
       makeDraggableL fl >=>
-      attr "r" "5"
+      attr "r" "7"
     circles ?? attr' "class" (const . (getVertex >=> pure . vertClass))
 
     textGroups <- textLayer ?? selectAll "g" >=>
@@ -433,8 +433,8 @@ refreshImplGraphView
         attr' "cx" (const . (getX >=> pure . show)) >=>
         attr' "cy" (const . (getY >=> pure . show))
       labels ??
-        attr' "x" (const . (getX >=> pure . show . (+ 8))) >=>
-        attr' "y" (const . (getY >=> pure . show . (+ 8)))
+        attr' "x" (const . (getX >=> pure . show . (+ 10))) >=>
+        attr' "y" (const . (getY >=> pure . show . (+ 10)))
       return ()
 
 -- ---------------------------------------------------------------------------
@@ -531,7 +531,7 @@ init parent = do
 
   assigView <- parent ?? createAssigView "assigView"
 
-  implGraphView <- parent ?? createImplGraphView "implGraphView" 600 418
+  implGraphView <- parent ?? createImplGraphView "implGraphView" 600 468
 
   addClauseBtn <- parent ?? append "input" >=>
                     classed "addClauseBtn" True >=>

@@ -1,18 +1,19 @@
 /* Copyright (c) 2013 Radek Micek */
 
 body {
+  font-family: sans-serif;
   font-size: 18px;
 }
 
 input.addClauseBtn {
   position: absolute;
-  top: 428px;
+  top: 478px;
   left: 242px;
 }
 
 input.startVisBtn, input.nextBtn {
   position: absolute;
-  top: 428px;
+  top: 478px;
   left: 4px;
 }
 
@@ -22,7 +23,7 @@ div.msgView {
   left: 4px;
   border: 1px solid blue;
   width: 220px;
-  height: 100px;
+  height: 150px;
   margin: 0;
   padding: 6px;
 }
@@ -34,7 +35,7 @@ ul.clauseView {
   list-style-type: none;
   border: 1px solid blue;
   width: 220px;
-  height: 418px;
+  height: 468px;
   overflow: auto;
   margin: 0;
   padding: 0 6px;
@@ -78,7 +79,7 @@ ul.clauseView li.unassigned {
 
 ul.assigView {
   position: absolute;
-  top: 122px;
+  top: 172px;
   left: 4px;
   list-style-type: none;
   border: 1px solid blue;
@@ -103,14 +104,19 @@ ul.assigView ul li {
   margin: 0px 3px;
 }
 
+ul.assigView li li {
+  border-width: 2px;
+  border-style: solid;
+}
+
 ul.assigView li.decided {
   background-color: #aaa;
-  border: 1px solid #777;
+  border-color: #777;
 }
 
 ul.assigView li.forced {
   background-color: #33cc66;
-  border: 1px solid #009933;
+  border-color: #009933;
 }
 
 svg.implGraphView {
@@ -133,15 +139,17 @@ svg.implGraphView line.proc {
   stroke: #cc0000;
 }
 
+svg.implGraphView circle {
+  stroke-width: 2px;
+}
+
 svg.implGraphView circle.decided {
   stroke: #777;
-  stroke-width: 1px;
   fill: #aaa;
 }
 
 svg.implGraphView circle.forced {
   stroke: #009933;
-  stroke-width: 1px;
   fill: #33cc66;
 }
 
@@ -155,7 +163,6 @@ svg.implGraphView circle.proc {
 
 svg.implGraphView circle.conflVertex {
   stroke: #cc0000;
-  stroke-width: 1px;
   fill: #ff3333;
 }
 
