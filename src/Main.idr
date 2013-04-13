@@ -619,15 +619,25 @@ init parent = do
       -- Literals cannot be parsed.
       Just (Left err) =>
         refreshMsgView (stMsgView s) $ "Cannot parse literals: " ++ err
-      -- Literals are ok, add clause.
+      -- Literals are ok.
       Just (Right lits) => do
-        case run (stSol s) (addClause lits) of
-          Interrupt _ _ _ =>
-            putStrLn "Internal error: unexpected interrupt when adding clause"
-          Finish sol _ => do
-            modifyIORef r (record { stSol = sol })
-            refreshClauseView (stClauseView s) (sClauses sol) (sTrail sol)
-            refreshMsgView (stMsgView s) ""
+        let lits' = nub lits
+        let vars : List Var = map (\(MkLit _ v) => v) lits'
+        if isNil lits' then
+          refreshMsgView (stMsgView s) "Clause is ignored because it is empty"
+        else if vars /= nub vars then
+          refreshMsgViewHtml (stMsgView s) $ "Clause "
+            ++ clauseToHtml' lits'
+            ++ " is ignored because it contains complementary literals"
+        -- Add clause.
+        else
+          case run (stSol s) (addClause lits') of
+            Interrupt _ _ _ =>
+              putStrLn "Internal error: unexpected interrupt when adding clause"
+            Finish sol _ => do
+              modifyIORef r (record { stSol = sol })
+              refreshClauseView (stClauseView s) (sClauses sol) (sTrail sol)
+              refreshMsgView (stMsgView s) ""
 
   startVisBtn `onClick` \() => do
     s <- readIORef r
