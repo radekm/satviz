@@ -51,6 +51,84 @@ test_parseLits_bad : so $ isLeft $ parseLits "a | ~b | | ~c"
 test_parseLits_bad = oh
 
 -- ---------------------------------------------------------------------------
+-- Minimization
+
+minim_clauses : List Clause
+minim_clauses =
+  [ MkClause (MkCId 1) [MkLit Pos "a"]
+  , MkClause (MkCId 2) [MkLit Pos "b"]
+  , MkClause (MkCId 3) [MkLit Neg "a", MkLit Neg "c", MkLit Pos "d"]
+  , MkClause (MkCId 4) [MkLit Neg "b", MkLit Neg "d", MkLit Pos "e"]
+  , MkClause (MkCId 5) [MkLit Neg "d", MkLit Neg "f", MkLit Pos "g"]
+  , MkClause (MkCId 6) [MkLit Neg "e", MkLit Neg "g", MkLit Pos "h"]
+  , MkClause (MkCId 7) [MkLit Neg "h", MkLit Pos "i"]
+  , MkClause (MkCId 8) [MkLit Neg "k", MkLit Pos "l"]
+  , MkClause (MkCId 9) [MkLit Neg "l", MkLit Neg "r", MkLit Pos "s"]
+  , MkClause (MkCId 10) [ MkLit Neg "d", MkLit Neg "g"
+                        , MkLit Neg "s", MkLit Pos "t" ]
+  , MkClause (MkCId 11) [MkLit Neg "s", MkLit Pos "x"]
+  , MkClause (MkCId 12) [ MkLit Neg "h", MkLit Neg "i"
+                        , MkLit Neg "t", MkLit Pos "y" ]
+  , MkClause (MkCId 13) [MkLit Neg "x", MkLit Pos "z"]
+  , MkClause (MkCId 14) [MkLit Neg "z", MkLit Neg "y"]
+  ]
+
+minim_trail : Trail
+minim_trail =
+  [ (MkLit Pos "z", Just $ MkCId 13, 4)
+  , (MkLit Pos "y", Just $ MkCId 12, 4)
+  , (MkLit Pos "x", Just $ MkCId 11, 4)
+  , (MkLit Pos "t", Just $ MkCId 10, 4)
+  , (MkLit Pos "s", Just $ MkCId 9, 4)
+  , (MkLit Pos "r", Nothing, 4)
+  , (MkLit Pos "l", Just $ MkCId 8, 3)
+  , (MkLit Pos "k", Nothing, 3)
+  , (MkLit Pos "i", Just $ MkCId 7, 2)
+  , (MkLit Pos "h", Just $ MkCId 6, 2)
+  , (MkLit Pos "g", Just $ MkCId 5, 2)
+  , (MkLit Pos "f", Nothing, 2)
+  , (MkLit Pos "e", Just $ MkCId 4, 1)
+  , (MkLit Pos "d", Just $ MkCId 3, 1)
+  , (MkLit Pos "c", Nothing, 1)
+  , (MkLit Pos "b", Just $ MkCId 2, 0)
+  , (MkLit Pos "a", Just $ MkCId 1, 0)
+  ]
+
+minim_sol : Sol
+minim_sol = record
+              { sClauses = minim_clauses
+              , sLevel = 4
+              , sTrail = minim_trail }
+            emptySol
+
+runMinim : Sol -> List Lit -> (List Lit, List Event)
+runMinim s assertingCl = run' [] $ run s $ minimize assertingCl
+  where
+    run' : List i -> AlgoResult Sol i r -> (r, List i)
+    run' is (Interrupt s i k) = run' (i :: is) $ resume s k
+    run' is (Finish _ r) = (r, is)
+
+minim_assertingCl : List Lit
+minim_assertingCl =
+  [ MkLit Neg "d"
+  , MkLit Neg "g"
+  , MkLit Neg "h"
+  , MkLit Neg "i"
+  , MkLit Neg "s"
+  ]
+
+minim_minimizedAssertingCl : List Lit
+minim_minimizedAssertingCl =
+  [ MkLit Neg "d"
+  , MkLit Neg "g"
+  , MkLit Neg "s"
+  ]
+
+test_minim : so $ fst (runMinim minim_sol minim_assertingCl)
+                    == minim_minimizedAssertingCl
+test_minim = oh
+
+-- ---------------------------------------------------------------------------
 -- Solver
 
 solveProb : SatAlgo Result () -> (Result, Assignment, List Event)

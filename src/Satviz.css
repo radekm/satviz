@@ -139,6 +139,10 @@ svg.implGraphView line.proc {
   stroke: #cc0000;
 }
 
+svg.implGraphView line.minim {
+  stroke: #cc0000;
+}
+
 svg.implGraphView circle {
   stroke-width: 2px;
 }
@@ -158,6 +162,10 @@ svg.implGraphView circle.inConflClause {
 }
 
 svg.implGraphView circle.proc {
+  stroke: #cc0000;
+}
+
+svg.implGraphView circle.minim {
   stroke: #cc0000;
 }
 

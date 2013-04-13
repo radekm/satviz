@@ -66,6 +66,7 @@ data Operation
   = OOther
   -- Current conflict clause, original conflict clause, processed variables.
   | OLearn (List Lit) Clause (List Var)
+  | OMinimize (List Lit)
 
 -- Solver state.
 record Sol : Type where
@@ -73,6 +74,7 @@ record Sol : Type where
           (sLevel : Level) ->
           (sTrail : Trail) ->
           (sOp : Operation) ->
+          (sEnableMinimization : Bool) ->
           Sol
 
 data Event
@@ -85,6 +87,14 @@ data Event
   | EResolve Var (List Lit) Clause (List Lit)
   | ESkip Var (List Lit) Clause
   | EAnalyzeEnd (List Lit)
+  -- Candidates for removal, asserting clause.
+  | EMinStart (List Lit) (List Lit)
+  | ETestRedundant Lit (List Lit)
+  | ERedundant Lit (List Lit)
+  | ENotRedundant Lit (List Lit)
+  -- Redundant literals, original asserting clause,
+  -- minimized asserting clause.
+  | EMinEnd (List Lit) (List Lit) (List Lit)
   | ELearn Clause
   | EBacktrack Lit (Maybe Clause)
 
@@ -104,7 +114,7 @@ Assignment : Type
 Assignment = Lit -> LBool
 
 emptySol : Sol
-emptySol = MkSol [] 0 [] OOther
+emptySol = MkSol [] 0 [] OOther True
 
 negLit : Lit -> Lit
 negLit (MkLit Pos l) = MkLit Neg l
@@ -207,6 +217,96 @@ litToLevel trail (MkLit _ v) = level $ fromJust $ findInTrail v trail
   where
     level (_, _, l) = l
 
+litRedundant : List Lit -> Lit -> SatAlgo r Bool
+litRedundant assertingCl = \l => get >>= litRedundant' (negLit l)
+  where
+    -- Literal must be in the trail (i.e. it must be true).
+    litRedundant' : Lit -> Sol -> SatAlgo r Bool
+    litRedundant' literal s = do
+        let (MkLit _ variable) = literal
+        let (_, antecedent, _) = fromJust $ findInTrail variable $ sTrail s
+        let anteLits = getLits $ findClause (fromJust antecedent) $ sClauses s
+        let queue = List.map negLit $ filter (/= literal) anteLits
+        let (b, highlight) = bfs queue $ map (\l => (l, Nothing)) queue
+
+        put (record { sOp = OMinimize highlight } s)
+        interrupt $ ETestRedundant (negLit literal) assertingCl
+
+        put (record { sOp = OOther } s)
+        if b then
+          interrupt $ ERedundant (negLit literal) assertingCl
+        else
+          interrupt $ ENotRedundant (negLit literal) assertingCl
+
+        return b
+      where
+        Redundant : Type
+        Redundant = Bool
+        Marked : Type
+        Marked = (Lit, Maybe Lit)
+        bfs : List Lit -> List Marked -> (Redundant, List Lit)
+        bfs [] marked = (True, map fst marked) -- Literal is redundant.
+        bfs (q :: qs) marked =
+          -- Literal ~q is in asserting clause.
+          if negLit q `elem` assertingCl then
+            bfs qs marked
+          else
+            let (MkLit _ var) = q in
+            case fromJust $ findInTrail var (sTrail s) of
+              -- Literal isn't redundant.
+              (_, Nothing, _) => (False, constructPath q)
+              (_, Just _, O) => bfs qs marked
+              (_, Just cid, _) =>
+                let newLits : List Lit =
+                  filter (\l => all ((/= l) . fst) marked) -- l is not marked.
+                    $ map negLit
+                    $ filter (/= q)
+                    $ getLits
+                    $ findClause cid (sClauses s) in
+                -- Add antecedents to the queue and mark them.
+                bfs
+                  (qs ++ newLits)
+                  (marked ++ map (\l => (l, Just q)) newLits)
+          where
+            constructPath : Lit -> List Lit
+            constructPath lit =
+              case fromJust $ find (\(l, _) => l == lit) marked of
+                (_, Nothing) => [lit]
+                (_, Just l) => lit :: constructPath l
+
+-- Common.filterM doesn't work for some reason.
+filterM' : (a -> SatAlgo r Bool) -> List a -> SatAlgo r (List a)
+filterM' _ [] = return List.Nil
+filterM' p (x :: xs) = do
+  b <- p x
+  ys <- filterM' p xs
+  return (b ? List.(::) x ys : ys)
+
+minimize : List Lit -> SatAlgo r (List Lit)
+minimize assertingCl = do
+    s <- get
+
+    let candidates : List Lit =
+      map (negLit . getLit)
+        -- Skip decided literals.
+        $ filter (\(_, ante, _) => isJust ante)
+        -- Skip literal from current decision level.
+        $ filter (\(_, _, lvl) => sLevel s /= lvl)
+        $ List.map fromJust
+        $ List.map (\(MkLit _ var) => findInTrail var $ sTrail s) assertingCl
+
+    interrupt $ EMinStart candidates assertingCl
+
+    redundant <- filterM' (litRedundant assertingCl) candidates
+    let newAssertingCl = filter (\l => List.all (/= l) redundant) assertingCl
+
+    interrupt $ EMinEnd redundant assertingCl newAssertingCl
+
+    return newAssertingCl
+  where
+    getLit : (Lit, Maybe Ante, Level) -> Lit
+    getLit (l, _, _) = l
+
 isAsserting : List Lit -> Level -> Trail -> Bool
 isAsserting lits level trail = (List.length $ filter (== level) levels) == 1
   where
@@ -215,7 +315,7 @@ isAsserting lits level trail = (List.length $ filter (== level) levels) == 1
 
 -- Returns a learned clause.
 -- If decision level > 0 then the learned clause is nonempty.
-analyzeConflict : Clause -> SatAlgo r Clause
+analyzeConflict : Clause -> SatAlgo r (List Lit)
 analyzeConflict conflClause = do
     let conflLits = getLits conflClause
     s <- get
@@ -224,7 +324,7 @@ analyzeConflict conflClause = do
     assertingLits <- resolve s (sTrail s) conflLits []
     put (record { sOp = OOther } s)
     interrupt $ EAnalyzeEnd assertingLits
-    addClause assertingLits
+    return assertingLits
   where
     partial
     resolve : Sol -> Trail -> List Lit -> List Var -> SatAlgo r (List Lit)
@@ -305,7 +405,10 @@ solve = do
       if sLevel s == 0 then
         return Unsat
       else do
-        learned <- analyzeConflict confl
+        assertingCl <- analyzeConflict confl
+        assertingCl' <-
+          (sEnableMinimization s) ? minimize assertingCl : return assertingCl
+        learned <- addClause assertingCl'
         interrupt (ELearn learned)
         let blevel = computeBacktrackLevel learned (sTrail s)
         backtrack blevel

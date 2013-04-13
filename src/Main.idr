@@ -39,6 +39,10 @@ clauseToHtml' lits =
 clauseToHtml : Clause -> String
 clauseToHtml (MkClause _ lits) = clauseToHtml' lits
 
+litListToHtml : List Lit -> String
+litListToHtml lits =
+  "[" ++ (mconcat $ intersperse ", " $ map litToHtml lits) ++ "]"
+
 -- ---------------------------------------------------------------------------
 -- Message view
 
@@ -218,6 +222,10 @@ createImplGraphView cssClass width height parent = do
     attr "id" "arrowProc" >=>
     attr "fill" "#cc0000" >=>
     setupMarker
+  defs ?? append "svg:marker" >=>
+    attr "id" "arrowMinim" >=>
+    attr "fill" "#cc0000" >=>
+    setupMarker
 
   [| MkImplGraphView
        (mkForceLayout width height >>=
@@ -377,8 +385,8 @@ refreshImplGraphView
     isProc : List Var -> Vertex -> Bool
     isProc _ VConfl = True
     isProc vars (VLit (MkLit _ var)) = isJust $ find (== var) vars
-    edgeCase : String -> String -> String -> Edge -> String
-    edgeCase normal cut proc (src, tgt) =
+    edgeCase : String -> String -> String -> String -> Edge -> String
+    edgeCase normal cut proc minim (src, tgt) =
       case operation of
         OLearn conflCl _ vars =>
           if isProc vars src then
@@ -387,14 +395,25 @@ refreshImplGraphView
             cut
           else
             normal
+        OMinimize lits =>
+          case (src, tgt) of
+            (VLit s, VLit t) =>
+              if (s `elem` lits) && (t `elem` lits) then
+                minim
+              else
+                normal
+            _ => "error"
         _ => normal
-    edgeCase _ _ _ (VConfl, _) = "error"
+    edgeCase _ _ _ _ (VConfl, _) = "error"
     edgeClass : Edge -> String
-    edgeClass = edgeCase "" "cut" "proc"
+    edgeClass = edgeCase "" "cut" "proc" "minim"
     edgeMarkerEnd : Edge -> String
-    edgeMarkerEnd = edgeCase "url(#arrow)" "url(#arrowCut)" "url(#arrowProc)"
+    edgeMarkerEnd = edgeCase
+                      "url(#arrow)"
+                      "url(#arrowCut)" "url(#arrowProc)"
+                      "url(#arrowMinim)"
     edgeDashArray : Edge -> String
-    edgeDashArray = edgeCase "" "" "4, 4"
+    edgeDashArray = edgeCase "" "" "4, 4" ""
     vertClass : Vertex -> String
     vertClass (VLit (MkLit s var)) = cls ++ opCls
       where
@@ -410,6 +429,11 @@ refreshImplGraphView
                       " proc"
                     else if isInConflClause conflCl v then
                       " inConflClause"
+                    else
+                      ""
+                  OMinimize lits =>
+                    if (MkLit s var) `elem` lits then
+                      " minim"
                     else
                       ""
                   _ => ""
@@ -494,6 +518,38 @@ procAlgoResult algoRes r = do
         EAnalyzeEnd cl =>
           putMsg $ "Analysis: found asserting clause "
             ++ clauseToHtml' cl
+        EMinStart candidates assertingCl =>
+          putMsg $ "Minimization:"
+            ++ " remove redundant literals from asserting clause "
+            ++ clauseToHtml' assertingCl
+            ++ "; candidates for removal are "
+            ++ litListToHtml candidates
+        ETestRedundant l assertingCl =>
+          putMsg $ "Minimization:"
+            ++ " test whether literal "
+            ++ litToHtml l
+            ++ " is redundant in asserting clause "
+            ++ clauseToHtml' assertingCl
+        ERedundant l assertingCl =>
+          putMsg $ "Minimization:"
+            ++ " literal "
+            ++ litToHtml l
+            ++ " is redundant in asserting clause "
+            ++ clauseToHtml' assertingCl
+        ENotRedundant l assertingCl =>
+          putMsg $ "Minimization:"
+            ++ " literal "
+            ++ litToHtml l
+            ++ " isn't redundant in asserting clause "
+            ++ clauseToHtml' assertingCl
+        EMinEnd redundantLits assertingCl minAssertingCl =>
+          putMsg $ "Minimization:"
+            ++ " remove redundant literals "
+            ++ litListToHtml redundantLits
+            ++ " from asserting clause "
+            ++ clauseToHtml' assertingCl
+            ++ " and form new asserting clause "
+            ++ clauseToHtml' minAssertingCl
         ELearn cl =>
           putMsg $ "Learning: add asserting clause "
             ++ clauseToHtml cl
