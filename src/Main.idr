@@ -505,7 +505,7 @@ procAlgoResult algoRes r = do
           putMsg $ "Analysis: make asserting clause "
             ++ "from current conflict clause " ++ clauseToHtml cl
         EResolve v conflCl anteCl resolvent =>
-          putMsg $ "Analysis: Resolve current conflict clause "
+          putMsg $ "Analysis: resolve current conflict clause "
             ++ clauseToHtml' conflCl
             ++ " with " ++ clauseToHtml anteCl
             ++ " on variable " ++ v
