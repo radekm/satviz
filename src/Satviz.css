@@ -28,6 +28,11 @@ div.msgView {
   padding: 6px;
 }
 
+div.msgView strong {
+  font-weight: normal;
+  color: blue;
+}
+
 ul.clauseView {
   position: absolute;
   top: 4px;

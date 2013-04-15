@@ -25,6 +25,9 @@ modifyIORef r f = (pure f <$> readIORef r) >>= writeIORef r
 
 -- ---------------------------------------------------------------------------
 
+strong : String -> String
+strong s = "<strong>" ++ s ++ "</strong>"
+
 litToHtml : Lit -> String
 litToHtml (MkLit Pos lit) = lit
 litToHtml (MkLit Neg lit) = "&#172;" ++ lit
@@ -525,6 +528,11 @@ procAlgoResult : AlgoResult Sol Event Result -> IORef State -> IO ()
 procAlgoResult algoRes r = do
   s <- readIORef r
   let putMsg = refreshMsgViewHtml (stMsgView s)
+  let funcs = ( strong . litToHtml
+              , strong . clauseToHtml'
+              , strong . clauseToHtml
+              , strong . litListToHtml )
+  let (lit2Html, clause2Html', clause2Html, litList2Html) = funcs
   case algoRes of
     Finish sol res => do
       (stNextBtn s) ?? remove
@@ -535,105 +543,105 @@ procAlgoResult algoRes r = do
     Interrupt sol e k => do
       modifyIORef r (record { stSol = sol, stLastInterrupt = Just (e, k) })
       case e of
-        EDecide lit => putMsg $ "Decision: satisfy " ++ litToHtml lit
+        EDecide lit => putMsg $ "Decision: satisfy " ++ lit2Html lit
         EProp lit cl =>
           putMsg $ "Propagation: clause "
-            ++ clauseToHtml cl
+            ++ clause2Html cl
             ++ " forces "
-            ++ litToHtml lit
+            ++ lit2Html lit
         EConfl cl =>
           putMsg $ "Conflict clause "
-            ++ clauseToHtml cl
+            ++ clause2Html cl
             ++ " detected"
         EWShortClause l cl =>
           putMsg $ "Propagation: satisfy "
-            ++ litToHtml l
+            ++ lit2Html l
         EWPropLitStart l =>
           putMsg $ "Propagation: process clauses where "
-            ++ litToHtml l
+            ++ lit2Html l
             ++ " is watched"
         EWOtherLitTrue l l' cl =>
           putMsg $ "Propagation: skip clause "
-            ++ clauseToHtml cl
+            ++ clause2Html cl
             ++ " because other watched literal "
-            ++ litToHtml l'
+            ++ lit2Html l'
             ++ " is true"
         EWReplaceLit oldL newL cl =>
           putMsg $ "Propagation: replace watched literal "
-            ++ litToHtml oldL
+            ++ lit2Html oldL
             ++ " by "
-            ++ litToHtml newL
+            ++ lit2Html newL
             ++ " in clause "
-            ++ clauseToHtml cl
+            ++ clause2Html cl
         EWConfl l l' cl =>
           putMsg $ "Propagation: literal "
-            ++ litToHtml l
+            ++ lit2Html l
             ++ " watched in clause "
-            ++ clauseToHtml cl
+            ++ clause2Html cl
             ++ " cannot be replaced and other watched literal "
-            ++ litToHtml l'
+            ++ lit2Html l'
             ++ " is false"
         EWProp l l' cl =>
           putMsg $ "Propagation: literal "
-            ++ litToHtml l
+            ++ lit2Html l
             ++ " watched in clause "
-            ++ clauseToHtml cl
+            ++ clause2Html cl
             ++ " cannot be replaced, so other watched literal "
-            ++ litToHtml l'
+            ++ lit2Html l'
             ++ " is forced"
         EAnalyzeStart cl =>
           putMsg $ "Analysis: make asserting clause "
-            ++ "from current conflict clause " ++ clauseToHtml cl
+            ++ "from current conflict clause " ++ clause2Html cl
         EResolve v conflCl anteCl resolvent =>
           putMsg $ "Analysis: resolve current conflict clause "
-            ++ clauseToHtml' conflCl
-            ++ " with " ++ clauseToHtml anteCl
-            ++ " on variable " ++ v
+            ++ clause2Html' conflCl
+            ++ " with " ++ clause2Html anteCl
+            ++ " on variable " ++ strong v
             ++ " and form new conflict clause "
-            ++ clauseToHtml' resolvent
+            ++ clause2Html' resolvent
         ESkip v conflCl anteCl =>
           putMsg $ "Analysis: variable "
-            ++ v ++ " is not present in current conflict clause "
-            ++ clauseToHtml' conflCl
+            ++ strong v ++ " is not present in current conflict clause "
+            ++ clause2Html' conflCl
         EAnalyzeEnd cl =>
           putMsg $ "Analysis: found asserting clause "
-            ++ clauseToHtml' cl
+            ++ clause2Html' cl
         EMinStart candidates assertingCl =>
           putMsg $ "Minimization:"
             ++ " remove redundant literals from asserting clause "
-            ++ clauseToHtml' assertingCl
+            ++ clause2Html' assertingCl
             ++ "; candidates for removal are "
-            ++ litListToHtml candidates
+            ++ litList2Html candidates
         ETestRedundant l assertingCl =>
           putMsg $ "Minimization:"
             ++ " test whether literal "
-            ++ litToHtml l
+            ++ lit2Html l
             ++ " is redundant in asserting clause "
-            ++ clauseToHtml' assertingCl
+            ++ clause2Html' assertingCl
         ERedundant l assertingCl =>
           putMsg $ "Minimization:"
             ++ " literal "
-            ++ litToHtml l
+            ++ lit2Html l
             ++ " is redundant in asserting clause "
-            ++ clauseToHtml' assertingCl
+            ++ clause2Html' assertingCl
         ENotRedundant l assertingCl =>
           putMsg $ "Minimization:"
             ++ " literal "
-            ++ litToHtml l
+            ++ lit2Html l
             ++ " isn't redundant in asserting clause "
-            ++ clauseToHtml' assertingCl
+            ++ clause2Html' assertingCl
         EMinEnd redundantLits assertingCl minAssertingCl =>
           putMsg $ "Minimization:"
             ++ " remove redundant literals "
-            ++ litListToHtml redundantLits
+            ++ litList2Html redundantLits
             ++ " from asserting clause "
-            ++ clauseToHtml' assertingCl
+            ++ clause2Html' assertingCl
             ++ " and form new asserting clause "
-            ++ clauseToHtml' minAssertingCl
+            ++ clause2Html' minAssertingCl
         ELearn cl =>
           putMsg $ "Learning: add asserting clause "
-            ++ clauseToHtml cl
-        EBacktrack lit _ => putMsg $ "Backtracking: undo " ++ litToHtml lit
+            ++ clause2Html cl
+        EBacktrack lit _ => putMsg $ "Backtracking: undo " ++ lit2Html lit
 
 -- Updates the visualization to correspond to the current state.
 -- Runs the solver and updates the message with the description
@@ -709,7 +717,7 @@ init parent = do
           refreshMsgView (stMsgView s) "Clause is ignored because it is empty"
         else if vars /= nub vars then
           refreshMsgViewHtml (stMsgView s) $ "Clause "
-            ++ clauseToHtml' lits'
+            ++ strong (clauseToHtml' lits')
             ++ " is ignored because it contains complementary literals"
         -- Add clause.
         else
