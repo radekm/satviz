@@ -78,10 +78,15 @@ createClauseView cssClass parent = do
     classed cssClass True >=>
     classed "clauseViewRoot" True)
 
-refreshClauseView : ClauseView -> List Clause -> Trail -> IO ()
-refreshClauseView (MkClauseView v) clauseList trail = do
-    clauseArr <- emptyA ()
-    mapM_ (mkArray . getLits >=> pushA clauseArr) clauseList
+refreshClauseView :
+  ClauseView ->
+  List Clause ->
+  Trail ->
+  List (CId, (Lit, Lit)) ->
+  Operation ->
+  IO ()
+refreshClauseView (MkClauseView v) clauseList trail watched operation = do
+    clauseArr <- mkArray clauseList
 
     let assig = trailToAssig trail
 
@@ -91,24 +96,63 @@ refreshClauseView (MkClauseView v) clauseList trail = do
     clauses ?? enter >=>
       append "li" >=>
       append "ul"
+    clauses ??
+      attr' "class" (const . pure . clauseClass)
 
     lits <- clauses ?? select "ul" >=>
               selectAll "li" >=>
-              bind' (\d, i => return d)
+              bind' (\d, i => mkArray $ map (\l => (getCId d, l)) $ getLits d)
     lits ?? exit >=> remove
     lits ?? enter >=>
-      append "li"
+      append "li" >=>
+      append "span"
 
     lits ??
-      html' (\lit, i => return $ litToHtml lit) >=>
-      attr' "class" (\lit, i => return $ litClass $ assig lit)
+      attr' "class" (\cidLit, i => return $ litClass cidLit assig) >=>
+      select "span" >=>
+      html' (\cidLit, i => return $ litToHtml $ snd cidLit)
 
     return ()
   where
-    litClass : LBool -> String
-    litClass LTrue = "sat"
-    litClass LFalse = "unsat"
-    litClass LUndef = "unassigned"
+    getCId : Clause -> CId
+    getCId (MkClause cid _) = cid
+    clauseClass : Clause -> String
+    clauseClass (MkClause cid _) =
+      case operation of
+        OPropagate before (cur :: after) =>
+          if cid `clElem` before then
+            "before"
+          else if cid `clElem` [cur] then
+            "cur"
+          else if cid `clElem` after then
+            "after"
+          else
+            ""
+        -- All clauses are processed.
+        OPropagate before [] =>
+          if cid `clElem` before then
+            "before"
+          else
+            ""
+        _ => ""
+      where
+        clElem : CId -> List Clause -> Bool
+        clElem cid' cs = isJust $ find ((== cid') . getCId) cs
+    litClass : (CId, Lit) -> Assignment -> String
+    litClass (cid, lit) assig =
+      case assig lit of
+        LTrue => "sat" ++ watchedCls
+        LFalse => "unsat" ++ watchedCls
+        LUndef => "unassigned" ++ watchedCls
+      where
+        watchedCls : String
+        watchedCls = case find (\(cid', _) => cid' == cid) watched of
+                       Nothing => ""
+                       Just (_, (l, l')) =>
+                         if lit == negLit l || lit == negLit l' then
+                           " watched"
+                         else
+                           ""
 
 -- ---------------------------------------------------------------------------
 -- Assignment view
@@ -501,6 +545,42 @@ procAlgoResult algoRes r = do
           putMsg $ "Conflict clause "
             ++ clauseToHtml cl
             ++ " detected"
+        EWShortClause l cl =>
+          putMsg $ "Propagation: satisfy "
+            ++ litToHtml l
+        EWPropLitStart l =>
+          putMsg $ "Propagation: process clauses where "
+            ++ litToHtml l
+            ++ " is watched"
+        EWOtherLitTrue l l' cl =>
+          putMsg $ "Propagation: skip clause "
+            ++ clauseToHtml cl
+            ++ " because other watched literal "
+            ++ litToHtml l'
+            ++ " is true"
+        EWReplaceLit oldL newL cl =>
+          putMsg $ "Propagation: replace watched literal "
+            ++ litToHtml oldL
+            ++ " by "
+            ++ litToHtml newL
+            ++ " in clause "
+            ++ clauseToHtml cl
+        EWConfl l l' cl =>
+          putMsg $ "Propagation: literal "
+            ++ litToHtml l
+            ++ " watched in clause "
+            ++ clauseToHtml cl
+            ++ " cannot be replaced and other watched literal "
+            ++ litToHtml l'
+            ++ " is false"
+        EWProp l l' cl =>
+          putMsg $ "Propagation: literal "
+            ++ litToHtml l
+            ++ " watched in clause "
+            ++ clauseToHtml cl
+            ++ " cannot be replaced, so other watched literal "
+            ++ litToHtml l'
+            ++ " is forced"
         EAnalyzeStart cl =>
           putMsg $ "Analysis: make asserting clause "
             ++ "from current conflict clause " ++ clauseToHtml cl
@@ -568,6 +648,8 @@ next r = do
         (stClauseView s)
         (sClauses $ stSol s)
         (sTrail $ stSol s)
+        (sWatched $ stSol s)
+        (sOp $ stSol s)
       refreshAssigView
         (stAssigView s)
         (sClauses $ stSol s)
@@ -636,7 +718,12 @@ init parent = do
               putStrLn "Internal error: unexpected interrupt when adding clause"
             Finish sol _ => do
               modifyIORef r (record { stSol = sol })
-              refreshClauseView (stClauseView s) (sClauses sol) (sTrail sol)
+              refreshClauseView
+                (stClauseView s)
+                (sClauses sol)
+                (sTrail sol)
+                (sWatched sol)
+                (sOp sol)
               refreshMsgView (stMsgView s) ""
 
   startVisBtn `onClick` \() => do

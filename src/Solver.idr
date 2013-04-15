@@ -35,10 +35,23 @@ instance Eq Sign where
   Neg == Neg = True
   _ == _ = False
 
+instance Ord Sign where
+  compare Pos Pos = EQ
+  compare Neg Neg = EQ
+  compare Pos Neg = LT
+  compare Neg Pos = GT
+
 data Lit = MkLit Sign Var
 
 instance Eq Lit where
   (MkLit sign var) == (MkLit sign' var') = sign == sign' && var == var'
+
+instance Ord Lit where
+  compare (MkLit s v) (MkLit s' v') =
+    case compare s s' of
+      LT => LT
+      GT => GT
+      EQ => compare v v'
 
 instance Show Lit where
   show (MkLit Pos lit) = lit
@@ -67,6 +80,8 @@ data Operation
   -- Current conflict clause, original conflict clause, processed variables.
   | OLearn (List Lit) Clause (List Var)
   | OMinimize (List Lit)
+  -- Processed clauses, remaining clauses.
+  | OPropagate (List Clause) (List Clause)
 
 -- Solver state.
 record Sol : Type where
@@ -74,13 +89,30 @@ record Sol : Type where
           (sLevel : Level) ->
           (sTrail : Trail) ->
           (sOp : Operation) ->
+          -- Corresponding clauses contain negations of the literals.
+          (sWatched : List (CId, (Lit, Lit))) ->
           (sEnableMinimization : Bool) ->
+          (sEnableWatchedLits : Bool) ->
           Sol
 
 data Event
   = EDecide Lit
   | EProp Lit Clause
   | EConfl Clause
+  | EWShortClause Lit Clause
+  | EWPropLitStart Lit
+  -- Watched literal which is being propagated,
+  -- other watched literal which is true, clause.
+  | EWOtherLitTrue Lit Lit Clause
+  -- Watched literal which is being propagated,
+  -- not watched literal which is not false, clause.
+  | EWReplaceLit Lit Lit Clause
+  -- Watched literal which is being propagated,
+  -- other watched literal which is false, clause.
+  | EWConfl Lit Lit Clause
+  -- Watched literal which is being propagated,
+  -- other watched literal which is unassigned, clause.
+  | EWProp Lit Lit Clause
   | EAnalyzeStart Clause
   -- Variable to be resolved on, current conflict clause,
   -- antecedent clause of the variable, resolvent.
@@ -114,7 +146,7 @@ Assignment : Type
 Assignment = Lit -> LBool
 
 emptySol : Sol
-emptySol = MkSol [] 0 [] OOther True
+emptySol = MkSol [] 0 [] OOther [] True True
 
 negLit : Lit -> Lit
 negLit (MkLit Pos l) = MkLit Neg l
@@ -185,6 +217,128 @@ propagate = do
     Just (cl, Conflict) => return $ Just cl
     Nothing => return Nothing
 
+wpropagate : SatAlgo r (Maybe Clause)
+wpropagate = do
+    confl <- propagateShort
+    case confl of
+      Just _ => return confl
+      _ => firstLit >>= propagateWatched
+  where
+    findShortToProp : Assignment -> List Clause -> Maybe (Clause, Prop)
+    findShortToProp _ [] = Nothing
+    findShortToProp _ (MkClause cid [] :: _) =
+      Just (MkClause cid [], Conflict)
+    findShortToProp assig (MkClause cid [l] :: cs) =
+      case assig l of
+        LTrue => findShortToProp assig cs
+        LFalse => Just (MkClause cid [l], Conflict)
+        LUndef => Just (MkClause cid [l], Unit l)
+    findShortToProp assig (_ :: cs) = findShortToProp assig cs
+
+    propagateShort : SatAlgo r (Maybe Clause)
+    propagateShort = do
+      s <- get
+      if sLevel s == 0 then
+        case findShortToProp (trailToAssig $ sTrail s) (sClauses s) of
+          Nothing => return Nothing
+          -- There should be no empty clause.
+          Just (cl, Conflict) => return $ Just cl
+          Just (MkClause cid lits, Unit l) => do
+            assign l $ Just cid
+            interrupt $ EWShortClause l $ MkClause cid lits
+            propagateShort
+      else
+        return Nothing
+
+    -- The first literal in the propagation queue.
+    firstLit : SatAlgo r (Maybe Lit)
+    firstLit = do
+      s <- get
+      case dropWhile (\(_, _, lvl) => lvl /= sLevel s) $ reverse (sTrail s) of
+        [] => return $ Nothing
+        (l, _, _) :: _ => return $ Just l
+
+    -- Next literal in the propagation queue.
+    nextLit : Lit -> SatAlgo r (Maybe Lit)
+    nextLit lit = do
+      s <- get
+      case dropWhile (\(l, _, _) => l /= lit) $ reverse (sTrail s) of
+        _ :: (l, _, _) :: _ => return $ Just l
+        _ => return Nothing
+
+    propagateWatched : Maybe Lit -> SatAlgo r (Maybe Clause)
+    -- Propagation queue is empty.
+    propagateWatched Nothing = return Nothing
+    propagateWatched (Just lit) = do
+        s <- get
+
+        -- Find clauses where lit is watched.
+        let clauses : List Clause =
+          map (\(cid, _) => findClause cid $ sClauses s)
+            $ filter (\(cid, (l, l')) => l == lit || l' == lit)
+            $ sWatched s
+
+        putOp [] clauses
+
+        interrupt $ EWPropLitStart (negLit lit)
+
+        confl <- propClauses [] clauses
+        case confl of
+          Nothing => nextLit lit >>= propagateWatched
+          confl => return confl
+      where
+        putOp : List Clause -> List Clause -> SatAlgo r ()
+        putOp proc remaining = do
+          s <- get
+          case remaining of
+            [] => put (record { sOp = OOther } s)
+            _ :: _ => put (record { sOp = OPropagate proc remaining } s)
+        propClauses : List Clause -> List Clause -> SatAlgo r (Maybe Clause)
+        propClauses proc [] = return Nothing
+        propClauses proc (c :: cs) = do
+          putOp (c :: proc) cs
+          s <- get
+
+          let (MkClause cid lits) = c
+          let (_, (wl, wl')) = fromJust
+                                 $ List.find (\(cid', _) => cid == cid')
+                                 $ sWatched s
+          let lit' = (wl == lit) ? wl' : wl
+          let assig = trailToAssig $ sTrail s
+
+          case assig $ negLit lit' of
+            LTrue => do
+              interrupt $ EWOtherLitTrue (negLit lit) (negLit lit') c
+              propClauses (c :: proc) cs
+            a =>
+              -- Find replacement for lit.
+              case
+                find (\l => negLit l /= lit &&
+                            negLit l /= lit' &&
+                            assig l /= LFalse)
+                     lits
+              of
+                Just newLit => do
+                  -- Replace watched literal.
+                  s2 <- get
+                  let (ws, ws') = List.break (\(cid', _) => cid == cid')
+                                    $ sWatched s2
+                  let watched : List (CId, (Lit, Lit)) =
+                    ws ++ ((cid, (negLit newLit, lit')) :: tl ws')
+                  put (record { sWatched = watched } s2)
+
+                  interrupt $ EWReplaceLit (negLit lit) newLit c
+                  propClauses (c :: proc) cs
+                Nothing =>
+                  if a == LFalse then do
+                    putOp (c :: proc) []
+                    interrupt $ EWConfl (negLit lit) (negLit lit') c
+                    return $ Just c
+                  else do
+                    assign (negLit lit') $ Just cid
+                    interrupt $ EWProp (negLit lit) (negLit lit') c
+                    propClauses (c :: proc) cs
+
 unassignedVars : Assignment -> List Clause -> List Var
 unassignedVars assig clauses =
   filter ((== LUndef) . assig . MkLit Pos) vars
@@ -203,13 +357,27 @@ choose = do
     [] => return Nothing
     v::_ => return $ Just $ MkLit Pos v
 
-addClause : List Lit -> SatAlgo r Clause
-addClause lits = do
+addClause' : List Lit -> Maybe (Lit, Lit) -> SatAlgo r Clause
+addClause' lits watch = do
   s <- get
   let clauses = sClauses s
-  let cl = MkClause (MkCId $ length clauses + 1) lits
-  put (record { sClauses = clauses ++ [cl] } s)
+  let cid = MkCId $ length clauses + 1
+  let cl = MkClause cid lits
+  let watched =
+    if sEnableWatchedLits s then
+      case watch of
+        Just (l, l') => sWatched s ++ [(cid, (negLit l, negLit l'))]
+        Nothing =>
+          case lits of
+            l :: l' :: _ => sWatched s ++ [(cid, (negLit l, negLit l'))]
+            _ => sWatched s
+    else
+      sWatched s
+  put (record { sClauses = clauses ++ [cl], sWatched = watched } s)
   return cl
+
+addClause : List Lit -> SatAlgo r Clause
+addClause lits = addClause' lits Nothing
 
 -- Literal must be assigned.
 litToLevel : Trail -> Lit -> Level
@@ -353,11 +521,16 @@ analyzeConflict conflClause = do
           -- missing case: []
 
 -- Assumes that every literal in the clause is assigned.
-computeBacktrackLevel : Clause -> Trail -> Level
-computeBacktrackLevel (MkClause _ lits) trail =
-  hd $ hd $ tl $ (groupBy (==) $ reverse $ sort levels) ++ [[0]]
+computeBacktrackLevel : List Lit -> Trail -> (Level, Maybe (Lit, Lit))
+computeBacktrackLevel lits trail =
+  case groupBy sameLevel $ reverse $ sort lits' of
+    ((_, l) :: _) :: ((lvl, l') :: _) :: _ => (lvl, Just (l, l'))
+    _ => (0, Nothing)
   where
-    levels = map (litToLevel trail) lits
+    lits' : List (Level, Lit)
+    lits' = map (\l => (litToLevel trail l, l)) lits
+    sameLevel : (Level, Lit) -> (Level, Lit) -> Bool
+    sameLevel (l, _) (l2, _) = l == l2
 
 backtrack : Level -> SatAlgo r ()
 backtrack level = do
@@ -388,7 +561,7 @@ instance Show Result where
 
 solve : SatAlgo r Result
 solve = do
-  conflCl <- propagate
+  conflCl <- get >>= (\s => (sEnableWatchedLits s) ? wpropagate : propagate)
   case conflCl of
     Nothing => do
       lit <- choose
@@ -408,9 +581,9 @@ solve = do
         assertingCl <- analyzeConflict confl
         assertingCl' <-
           (sEnableMinimization s) ? minimize assertingCl : return assertingCl
-        learned <- addClause assertingCl'
+        let (blevel, watch) = computeBacktrackLevel assertingCl' (sTrail s)
+        learned <- addClause' assertingCl' watch
         interrupt (ELearn learned)
-        let blevel = computeBacktrackLevel learned (sTrail s)
         backtrack blevel
         solve
 
