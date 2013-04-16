@@ -20,23 +20,17 @@ algoBind : Algo s i r a -> (a -> Algo s i r b) -> Algo s i r b
 algoBind x f = MkAlgo $ \s, k =>
   runAlgo x s (\a, s' => runAlgo (f a) s' k)
 
-class TVar (a : Type) where { }
-
-instance TVar a where { }
-
 instance Functor (Algo s i r) where
   fmap f x = algoBind x (\x' => algoReturn (f x'))
 
--- TVar constraints prevent compiler error "No Such variable".
-instance (TVar i, TVar r) => Applicative (Algo s i r) where
+instance Applicative (Algo s i r) where
   pure = algoReturn
   f <$> x =
     algoBind f (\f' =>
     algoBind x (\x' =>
     algoReturn (f' x')))
 
--- TVar constraints prevent compiler error "No Such variable".
-instance (TVar i, TVar r) => Monad (Algo s i r) where
+instance Monad (Algo s i r) where
   return = algoReturn
   (>>=) = algoBind
 
