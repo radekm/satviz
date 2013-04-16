@@ -194,11 +194,11 @@ assign l ante = do
       Just _ => sLevel s
   put (record { sTrail = (l, ante, lvl) :: trail, sLevel = lvl } s)
 
-findClauseToProp : Assignment -> List Clause -> SatAlgo r (Maybe (Clause, Prop))
-findClauseToProp _ [] = return Nothing
+findClauseToProp : Assignment -> List Clause -> Maybe (Clause, Prop)
+findClauseToProp _ [] = Nothing
 findClauseToProp assig (c::cs) =
   case testClause assig c of
-    Just p => return $ Just (c, p)
+    Just p => Just (c, p)
     Nothing => findClauseToProp assig cs
 
 -- Unit propagation. Returns conflict clause.
@@ -207,7 +207,7 @@ propagate = do
   s <- get
   let assig = trailToAssig $ sTrail s
   let clauses = sClauses s
-  clause <- findClauseToProp assig clauses
+  let clause = findClauseToProp assig clauses
   case clause of
     Just (cl, Unit l) => do
       let MkClause cid _ = cl
