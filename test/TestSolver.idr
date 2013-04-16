@@ -131,24 +131,42 @@ test_minim = oh
 -- ---------------------------------------------------------------------------
 -- Solver
 
-solveProb : SatAlgo Result () -> (Result, Assignment, List Event)
-solveProb prob = solve' [] $ run emptySol (prob $> solve)
+solveProb : Sol -> SatAlgo Result () -> (Result, Assignment, List Event)
+solveProb sol prob = solve' [] $ run sol (prob $> solve)
   where
     solve' : List i -> AlgoResult Sol i r -> (r, Assignment, List i)
     solve' is (Interrupt s i k) = solve' (i :: is) $ resume s k
     solve' is (Finish s r) = (r, trailToAssig $ sTrail s, is)
 
-isSat : SatAlgo Result () -> List (List Lit) -> Bool
-isSat prob lits = case solveProb prob of
+isSat' : SatAlgo Result () -> List (List Lit) -> Sol -> Bool
+isSat' prob lits sol = case solveProb sol prob of
   (Sat, assig, _) =>
     -- Some list of literals in lits is satisfied by assig.
     any (List.all $ \l => assig l == LTrue) lits
   _ => False
 
-isUnsat : SatAlgo Result () -> Bool
-isUnsat prob = case solveProb prob of
+isUnsat' : SatAlgo Result () -> Sol -> Bool
+isUnsat' prob sol = case solveProb sol prob of
   (Unsat, _, _) => True
   _ => False
+
+configs : List Sol
+configs = [ record { sEnableMinimization = False
+                   , sEnableWatchedLits = False } emptySol
+          , record { sEnableMinimization = True
+                   , sEnableWatchedLits = False } emptySol
+-- Needs a lot of memory.
+--          , record { sEnableMinimization = False
+--                   , sEnableWatchedLits = True } emptySol
+          , record { sEnableMinimization = True
+                   , sEnableWatchedLits = True } emptySol
+          ]
+
+isSat : SatAlgo Result () -> List (List Lit) -> Bool
+isSat prob lits = all (isSat' prob lits) configs
+
+isUnsat : SatAlgo Result () -> Bool
+isUnsat prob = all (isUnsat' prob) configs
 
 -- Satisfiable only by: a = 0, b = 0
 --                      a = 0, b = 1
