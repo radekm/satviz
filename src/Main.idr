@@ -36,8 +36,7 @@ clauseToHtml' : List Lit -> String
 clauseToHtml' lits =
   case lits of
     [] => "&#9633;"
-    l :: ls =>
-      litToHtml l ++ mconcat (map (\l' => " &#8744; " ++ litToHtml l') ls)
+    ls => mconcat $ intersperse " &#8744; " $ map litToHtml ls
 
 clauseToHtml : Clause -> String
 clauseToHtml (MkClause _ lits) = clauseToHtml' lits
