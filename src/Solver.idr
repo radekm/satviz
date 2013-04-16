@@ -91,12 +91,15 @@ record Sol : Type where
           (sOp : Operation) ->
           -- Corresponding clauses contain negations of the literals.
           (sWatched : List (CId, (Lit, Lit))) ->
+          (sChosen : Maybe Lit) ->
           (sEnableMinimization : Bool) ->
           (sEnableWatchedLits : Bool) ->
           Sol
 
 data Event
-  = EDecide Lit
+  -- Nonempty list of unassigned variables.
+  = EChoose (List Var)
+  | EDecide Lit
   | EProp Lit Clause
   | EConfl Clause
   | EWShortClause Lit Clause
@@ -146,7 +149,7 @@ Assignment : Type
 Assignment = Lit -> LBool
 
 emptySol : Sol
-emptySol = MkSol [] 0 [] OOther [] True True
+emptySol = MkSol [] 0 [] OOther [] Nothing True True
 
 negLit : Lit -> Lit
 negLit (MkLit Pos l) = MkLit Neg l
@@ -350,12 +353,23 @@ unassignedVars assig clauses =
 
 choose : SatAlgo r (Maybe Lit)
 choose = do
-  -- TODO: let user choose
   s <- get
   let vars = unassignedVars (trailToAssig $ sTrail s) (sClauses s)
+
   case vars of
     [] => return Nothing
-    v::_ => return $ Just $ MkLit Pos v
+    _ :: _ =>
+      case sChosen s of
+        Nothing => do
+          interrupt $ EChoose vars
+          choose
+        Just (MkLit sign v) => do
+          put (record { sChosen = Nothing } s)
+          if v `elem` vars then
+            return $ Just $ MkLit sign v
+          -- Chosen literal isn't among unassigned literals.
+          else
+            choose
 
 addClause' : List Lit -> Maybe (Lit, Lit) -> SatAlgo r Clause
 addClause' lits watch = do

@@ -134,7 +134,14 @@ test_minim = oh
 solveProb : Sol -> SatAlgo Result () -> (Result, Assignment, List Event)
 solveProb sol prob = solve' [] $ run sol (prob $> solve)
   where
-    solve' : List i -> AlgoResult Sol i r -> (r, Assignment, List i)
+    solve' :
+      List Event ->
+      AlgoResult Sol Event r ->
+      (r, Assignment, List Event)
+    solve' is (Interrupt s (EChoose (v :: vs)) k) =
+      solve'
+        (EChoose (v :: vs) :: is)
+        (resume (record { sChosen = Just $ MkLit Pos v } s) k)
     solve' is (Interrupt s i k) = solve' (i :: is) $ resume s k
     solve' is (Finish s r) = (r, trailToAssig $ sTrail s, is)
 

@@ -542,6 +542,7 @@ procAlgoResult algoRes r = do
     Interrupt sol e k => do
       modifyIORef r (record { stSol = sol, stLastInterrupt = Just (e, k) })
       case e of
+        EChoose vars => putMsg $ "Choose unassigned literal to be satisfied"
         EDecide lit => putMsg $ "Decision: satisfy " ++ lit2Html lit
         EProp lit cl =>
           putMsg $ "Propagation: clause "
@@ -648,25 +649,37 @@ procAlgoResult algoRes r = do
 next : IORef State -> IO ()
 next r = do
   s <- readIORef r
+  let sol = stSol s
   case stLastInterrupt s of
     Nothing => return ()
     Just (e, k) => do
       refreshClauseView
         (stClauseView s)
-        (sClauses $ stSol s)
-        (sTrail $ stSol s)
-        (sWatched $ stSol s)
-        (sOp $ stSol s)
+        (sClauses sol)
+        (sTrail sol)
+        (sWatched sol)
+        (sOp sol)
       refreshAssigView
         (stAssigView s)
-        (sClauses $ stSol s)
-        (sTrail $ stSol s)
+        (sClauses sol)
+        (sTrail sol)
       refreshImplGraphView
         (stImplGraphView s)
-        (sClauses $ stSol s)
-        (sTrail $ stSol s)
-        (sOp $ stSol s)
-      procAlgoResult (resume (stSol s) k) r
+        (sClauses sol)
+        (sTrail sol)
+        (sOp sol)
+      case e of
+        EChoose vars => do
+          litStr <- prompt "Choose literal to be satisfied"
+          case pure parseLit <$> litStr of
+            Just (Right lit) => do
+              -- Place chosen literal into the solver.
+              let sol2 = record { sChosen = Just lit } sol
+              procAlgoResult (resume sol2 k) r
+            _ =>
+              return ()
+        _ =>
+          procAlgoResult (resume sol k) r
 
 init : Sel NoData NoData -> IO ()
 init parent = do
