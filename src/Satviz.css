@@ -21,6 +21,36 @@ span.checkBoxRoot {
   font-size: 16px;
 }
 
+span.autoAssigCB {
+  position: absolute;
+  top: 20px;
+  left: 4px;
+}
+
+span.conflAnalVisCB {
+  position: absolute;
+  top: 50px;
+  left: 4px;
+}
+
+span.watchedLitsCB {
+  position: absolute;
+  top: 80px;
+  left: 4px;
+}
+
+span.minClauseCB {
+  position: absolute;
+  top: 110px;
+  left: 4px;
+}
+
+input.goOnBtn {
+  position: absolute;
+  top: 140px;
+  left: 4px;
+}
+
 div.msgView {
   position: absolute;
   top: 4px;

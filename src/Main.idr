@@ -544,6 +544,8 @@ removeCheckBox (MkCheckBox cb) = cb ?? remove
 record State : Type where
   MkState :
     (stSol : Sol) ->
+    (stAutoAssig : Bool) ->
+    (stConflAnalVis : Bool) ->
     (stLastInterrupt : Maybe (Event, Sol -> AlgoResult Sol Event Result)) ->
     (stMsgView : MsgView) ->
     (stClauseView : ClauseView) ->
@@ -574,7 +576,13 @@ procAlgoResult algoRes r = do
     Interrupt sol e k => do
       modifyIORef r (record { stSol = sol, stLastInterrupt = Just (e, k) })
       case e of
-        EChoose vars => putMsg $ "Choose unassigned literal to be satisfied"
+        EChoose (v :: _) =>
+          if stAutoAssig s then do
+            -- Place automatically chosen literal into the solver.
+            let sol2 = record { sChosen = Just $ MkLit Pos v } sol
+            procAlgoResult (resume sol2 k) r
+          else
+            putMsg $ "Choose unassigned literal to be satisfied"
         EDecide lit => putMsg $ "Decision: satisfy " ++ lit2Html lit
         EProp lit cl =>
           putMsg $ "Propagation: clause "
@@ -622,22 +630,34 @@ procAlgoResult algoRes r = do
             ++ lit2Html l'
             ++ " is forced"
         EAnalyzeStart cl =>
-          putMsg $ "Analysis: make asserting clause "
-            ++ "from current conflict clause " ++ clause2Html cl
+          if stConflAnalVis s then
+            putMsg $ "Analysis: make asserting clause "
+              ++ "from current conflict clause " ++ clause2Html cl
+          else
+            procAlgoResult (resume sol k) r
         EResolve v conflCl anteCl resolvent =>
-          putMsg $ "Analysis: resolve current conflict clause "
-            ++ clause2Html' conflCl
-            ++ " with " ++ clause2Html anteCl
-            ++ " on variable " ++ strong v
-            ++ " and form new conflict clause "
-            ++ clause2Html' resolvent
+          if stConflAnalVis s then
+            putMsg $ "Analysis: resolve current conflict clause "
+              ++ clause2Html' conflCl
+              ++ " with " ++ clause2Html anteCl
+              ++ " on variable " ++ strong v
+              ++ " and form new conflict clause "
+              ++ clause2Html' resolvent
+          else
+            procAlgoResult (resume sol k) r
         ESkip v conflCl anteCl =>
-          putMsg $ "Analysis: variable "
-            ++ strong v ++ " is not present in current conflict clause "
-            ++ clause2Html' conflCl
+          if stConflAnalVis s then
+            putMsg $ "Analysis: variable "
+              ++ strong v ++ " is not present in current conflict clause "
+              ++ clause2Html' conflCl
+          else
+            procAlgoResult (resume sol k) r
         EAnalyzeEnd cl =>
-          putMsg $ "Analysis: found asserting clause "
-            ++ clause2Html' cl
+          if stConflAnalVis s then
+            putMsg $ "Analysis: found asserting clause "
+              ++ clause2Html' cl
+          else
+            procAlgoResult (resume sol k) r
         EMinStart candidates assertingCl =>
           putMsg $ "Minimization:"
             ++ " remove redundant literals from asserting clause "
@@ -713,8 +733,8 @@ next r = do
         _ =>
           procAlgoResult (resume sol k) r
 
-init : Sel NoData NoData -> IO ()
-init parent = do
+initSolver : Sel NoData NoData -> (Bool, Bool, Bool, Bool) -> IO ()
+initSolver parent (autoAssig, conflAnalVis, watchedLits, minClause) = do
   msgView <- parent ?? createMsgView "msgView"
 
   clauseView <- parent ?? createClauseView "clauseView"
@@ -734,8 +754,11 @@ init parent = do
                    property "value" "Start visualization"
 
   r <- newIORef $ MkState
-         emptySol
-         Nothing
+         (record { sEnableWatchedLits = watchedLits
+                 , sEnableMinimization = minClause } emptySol)
+         autoAssig
+         conflAnalVis
+         Nothing -- Last interrupt.
          msgView
          clauseView
          assigView
@@ -792,6 +815,43 @@ init parent = do
     modifyIORef r (record { stNextBtn = nextBtn })
 
     procAlgoResult (run (stSol s) solve) r
+
+init : Sel NoData NoData -> IO ()
+init parent = do
+  cfg <- parent ?? append "div"
+
+  autoAssigCB <- createCheckBox
+                   "autoAssigCB"
+                   "Automatic assignment"
+                   True cfg
+
+  conflAnalVisCB <- createCheckBox
+                      "conflAnalVisCB"
+                      "Conflict analysis visualization"
+                      True cfg
+
+  watchedLitsCB <- createCheckBox
+                     "watchedLitsCB"
+                     "Watched literals"
+                     False cfg
+
+  minClauseCB <- createCheckBox
+                   "minClauseCB"
+                   "Minimize asserting clause"
+                   False cfg
+
+  goOnBtn <- cfg ?? append "input" >=>
+               classed "goOnBtn" True >=>
+               attr "type" "button" >=>
+               property "value" "Go on"
+
+  goOnBtn `onClick` \() => do
+    autoAssig <- isChecked autoAssigCB
+    conflAnalVis <- isChecked conflAnalVisCB
+    watchedLits <- isChecked watchedLitsCB
+    minClause <- isChecked minClauseCB
+    cfg ?? remove
+    initSolver parent (autoAssig, conflAnalVis, watchedLits, minClause)
 
 main : IO ()
 main =
