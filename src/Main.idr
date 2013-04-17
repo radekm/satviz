@@ -508,6 +508,38 @@ refreshImplGraphView
       return ()
 
 -- ---------------------------------------------------------------------------
+-- Check box
+
+data CheckBox = MkCheckBox (Sel NoData NoData)
+
+createCheckBox : String -> String -> Bool -> Sel a b -> IO CheckBox
+createCheckBox cssClass label checked parent = do
+  cb <- parent ?? append "span" >=>
+          forgetBoundData >=>
+          classed cssClass True >=>
+          classed "checkBoxRoot" True
+  cb ?? append "input" >=>
+    attr "type" "checkbox" >=>
+    boolProperty "checked" checked
+  cb ?? append "span" >=>
+    text label
+  return $ MkCheckBox cb
+
+isChecked : CheckBox -> IO Bool
+isChecked (MkCheckBox cb) =
+  cb ?? select "input" >=>
+    getBoolProperty "checked"
+
+setChecked : CheckBox -> Bool -> IO ()
+setChecked (MkCheckBox cb) checked = do
+  cb ?? select "input" >=>
+    boolProperty "checked" checked
+  return ()
+
+removeCheckBox : CheckBox -> IO ()
+removeCheckBox (MkCheckBox cb) = cb ?? remove
+
+-- ---------------------------------------------------------------------------
 
 record State : Type where
   MkState :

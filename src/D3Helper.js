@@ -93,6 +93,14 @@ var stylePrime = function (sel, name, f) {
   });
 };
 
+var boolProperty = function (sel, name, val) {
+  return sel.property(name, val ? true : false);
+};
+
+var getBoolProperty = function (sel, name) {
+  return sel.property(name) ? 1 : 0;
+};
+
 var propertyPrime = function (sel, name, f) {
   return sel.property(name, function (d, i) {
     return APPLY2(f, d, i);

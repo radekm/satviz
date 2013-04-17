@@ -165,6 +165,18 @@ style' name f sel =
     (FFun "stylePrime" [FAny $ Sel _ _, FString, FAny _] (FAny $ Sel _ _))
     sel name f
 
+getBoolProperty : String -> Sel a b -> IO Bool
+getBoolProperty name sel =
+  pure (/= 0) <$> mkForeign
+                    (FFun "getBoolProperty" [FAny $ Sel _ _, FString] FInt)
+                    sel name
+
+boolProperty : String -> Bool -> Sel a b -> IO (Sel a b)
+boolProperty name b sel =
+  mkForeign
+    (FFun "boolProperty" [FAny $ Sel _ _, FString, FInt] (FAny $ Sel _ _))
+    sel name (b ? 1 : 0)
+
 property : String -> String -> Sel a b -> IO (Sel a b)
 property name val sel =
   mkForeign

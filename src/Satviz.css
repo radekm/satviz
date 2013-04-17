@@ -17,6 +17,10 @@ input.startVisBtn, input.nextBtn {
   left: 4px;
 }
 
+span.checkBoxRoot {
+  font-size: 16px;
+}
+
 div.msgView {
   position: absolute;
   top: 4px;
