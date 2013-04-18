@@ -544,31 +544,51 @@ removeCheckBox (MkCheckBox cb) = cb ?? remove
 record State : Type where
   MkState :
     (stSol : Sol) ->
+    (stSolHist : List Sol) ->
     (stAutoAssig : Bool) ->
     (stConflAnalVis : Bool) ->
     (stLastInterrupt : Maybe (Event, Sol -> AlgoResult Sol Event Result)) ->
+    (stInterruptHist : List (Event, Sol -> AlgoResult Sol Event Result)) ->
     (stMsgView : MsgView) ->
     (stClauseView : ClauseView) ->
     (stAssigView : AssigView) ->
     (stImplGraphView : ImplGraphView) ->
     (stAddClauseBtn : Sel NoData NoData) ->
     (stStartVisBtn : Sel NoData NoData) ->
+    (stPrevBtn : Sel NoData NoData) ->
     (stNextBtn : Sel NoData NoData) ->
     State
+
+consMaybe : Maybe a -> List a -> List a
+consMaybe Nothing xs = xs
+consMaybe (Just x) xs = x :: xs
 
 -- Updates the message and the information about the last interrupt.
 procAlgoResult : AlgoResult Sol Event Result -> IORef State -> IO ()
 procAlgoResult algoRes r = do
   s <- readIORef r
+  let origSol = stSol s
+  let origLastInterrupt = stLastInterrupt s
+  let origSolHist = stSolHist s
+  let origInterruptHist = stInterruptHist s
   let putMsg = refreshMsgViewHtml (stMsgView s)
   let funcs = ( strong . litToHtml
               , strong . clauseToHtml'
               , strong . clauseToHtml
               , strong . litListToHtml )
   let (lit2Html, clause2Html', clause2Html, litList2Html) = funcs
+  let revertState = (record { stSol = origSol
+                            , stSolHist = origSolHist
+                            , stLastInterrupt = origLastInterrupt
+                            , stInterruptHist = origInterruptHist })
+  modifyIORef r (record { stSolHist = origSol :: origSolHist
+                        , stInterruptHist = consMaybe
+                                              origLastInterrupt
+                                              origInterruptHist })
   case algoRes of
     Finish sol res => do
-      (stNextBtn s) ?? remove
+      (stNextBtn s) ?? style "display" "none" >=>
+        (\x => return ()) -- Change result type to satisfy the compiler.
       modifyIORef r (record { stSol = sol, stLastInterrupt = Nothing })
       case res of
         Sat => putMsg "SAT"
@@ -580,6 +600,8 @@ procAlgoResult algoRes r = do
           if stAutoAssig s then do
             -- Place automatically chosen literal into the solver.
             let sol2 = record { sChosen = Just $ MkLit Pos v } sol
+            -- Don't save current sol and interrupt into history.
+            modifyIORef r revertState
             procAlgoResult (resume sol2 k) r
           else
             putMsg $ "Choose unassigned literal to be satisfied"
@@ -633,7 +655,9 @@ procAlgoResult algoRes r = do
           if stConflAnalVis s then
             putMsg $ "Analysis: make asserting clause "
               ++ "from current conflict clause " ++ clause2Html cl
-          else
+          else do
+            -- Don't save current sol and interrupt into history.
+            modifyIORef r revertState
             procAlgoResult (resume sol k) r
         EResolve v conflCl anteCl resolvent =>
           if stConflAnalVis s then
@@ -643,20 +667,26 @@ procAlgoResult algoRes r = do
               ++ " on variable " ++ strong v
               ++ " and form new conflict clause "
               ++ clause2Html' resolvent
-          else
+          else do
+            -- Don't save current sol and interrupt into history.
+            modifyIORef r revertState
             procAlgoResult (resume sol k) r
         ESkip v conflCl anteCl =>
           if stConflAnalVis s then
             putMsg $ "Analysis: variable "
               ++ strong v ++ " is not present in current conflict clause "
               ++ clause2Html' conflCl
-          else
+          else do
+            -- Don't save current sol and interrupt into history.
+            modifyIORef r revertState
             procAlgoResult (resume sol k) r
         EAnalyzeEnd cl =>
           if stConflAnalVis s then
             putMsg $ "Analysis: found asserting clause "
               ++ clause2Html' cl
-          else
+          else do
+            -- Don't save current sol and interrupt into history.
+            modifyIORef r revertState
             procAlgoResult (resume sol k) r
         EMinStart candidates assertingCl =>
           putMsg $ "Minimization:"
@@ -695,6 +725,25 @@ procAlgoResult algoRes r = do
             ++ clause2Html cl
         EBacktrack lit _ => putMsg $ "Backtracking: undo " ++ lit2Html lit
 
+refreshClauseAssigImplGraphViews : IORef State -> Sol -> IO ()
+refreshClauseAssigImplGraphViews r sol = do
+  s <- readIORef r
+  refreshClauseView
+    (stClauseView s)
+    (sClauses sol)
+    (sTrail sol)
+    (sWatched sol)
+    (sOp sol)
+  refreshAssigView
+    (stAssigView s)
+    (sClauses sol)
+    (sTrail sol)
+  refreshImplGraphView
+    (stImplGraphView s)
+    (sClauses sol)
+    (sTrail sol)
+    (sOp sol)
+
 -- Updates the visualization to correspond to the current state.
 -- Runs the solver and updates the message with the description
 -- of what the solver did.
@@ -705,33 +754,50 @@ next r = do
   case stLastInterrupt s of
     Nothing => return ()
     Just (e, k) => do
-      refreshClauseView
-        (stClauseView s)
-        (sClauses sol)
-        (sTrail sol)
-        (sWatched sol)
-        (sOp sol)
-      refreshAssigView
-        (stAssigView s)
-        (sClauses sol)
-        (sTrail sol)
-      refreshImplGraphView
-        (stImplGraphView s)
-        (sClauses sol)
-        (sTrail sol)
-        (sOp sol)
+      refreshClauseAssigImplGraphViews r sol
       case e of
         EChoose vars => do
           litStr <- prompt "Choose literal to be satisfied"
           case pure parseLit <$> litStr of
-            Just (Right lit) => do
-              -- Place chosen literal into the solver.
-              let sol2 = record { sChosen = Just lit } sol
-              procAlgoResult (resume sol2 k) r
+            Just (Right (MkLit sign v)) =>
+              if v `elem` vars then do
+                (stPrevBtn s) ?? style "display" "block" >=>
+                  (\x => return ()) -- Change result type to satisfy the compiler.
+                -- Place chosen literal into the solver.
+                let sol2 = record { sChosen = Just $ MkLit sign v } sol
+                procAlgoResult (resume sol2 k) r
+              else
+                return ()
             _ =>
               return ()
-        _ =>
+        _ => do
+          (stPrevBtn s) ?? style "display" "block" >=>
+            (\x => return ()) -- Change result type to satisfy the compiler.
           procAlgoResult (resume sol k) r
+
+prev : IORef State -> IO ()
+prev r = do
+  s <- readIORef r
+  case stInterruptHist s of
+    [] => return ()
+    (e, k) :: interruptHist => do
+      -- Currently (hd $ stSolHist s) and (stLastInterrupt s) are visualized.
+      let sol = hd $ tl $ stSolHist s
+      refreshClauseAssigImplGraphViews r sol
+      modifyIORef r (record { stSol = sol
+                            , stSolHist = tl $ tl $ stSolHist s
+                            , stLastInterrupt = head' interruptHist
+                            , stInterruptHist = drop 1 interruptHist })
+      (stNextBtn s) ?? style "display" "block" >=>
+        (\x => return ()) -- Change result type to satisfy the compiler.
+      if isNil interruptHist then
+        (stPrevBtn s) ?? style "display" "none" >=>
+          (\x => return ()) -- Change result type to satisfy the compiler.
+      else
+        return ()
+      procAlgoResult (Interrupt (hd $ stSolHist s) e k) r
+      return ()
+    _ => return ()
 
 initSolver : Sel NoData NoData -> (Bool, Bool, Bool, Bool) -> IO ()
 initSolver parent (autoAssig, conflAnalVis, watchedLits, minClause) = do
@@ -756,15 +822,18 @@ initSolver parent (autoAssig, conflAnalVis, watchedLits, minClause) = do
   r <- newIORef $ MkState
          (record { sEnableWatchedLits = watchedLits
                  , sEnableMinimization = minClause } emptySol)
+         []
          autoAssig
          conflAnalVis
          Nothing -- Last interrupt.
+         []
          msgView
          clauseView
          assigView
          implGraphView
          addClauseBtn
          startVisBtn
+         d3 -- Dummy.
          d3 -- Dummy.
 
   addClauseBtn `onClick` \() => do
@@ -806,13 +875,21 @@ initSolver parent (autoAssig, conflAnalVis, watchedLits, minClause) = do
     (stAddClauseBtn s) ?? remove
     (stStartVisBtn s) ?? remove
 
+    prevBtn <- parent ?? append "input" >=>
+                 classed "prevBtn" True >=>
+                 attr "type" "button" >=>
+                 property "value" "Prev" >=>
+                 style "display" "none"
+    prevBtn `onClick` \() => prev r
+
     nextBtn <- parent ?? append "input" >=>
                  classed "nextBtn" True >=>
                  attr "type" "button" >=>
                  property "value" "Next"
     nextBtn `onClick` \() => next r
 
-    modifyIORef r (record { stNextBtn = nextBtn })
+    modifyIORef r (record { stPrevBtn = prevBtn
+                          , stNextBtn = nextBtn })
 
     procAlgoResult (run (stSol s) solve) r
 

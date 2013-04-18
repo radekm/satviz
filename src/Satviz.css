@@ -5,13 +5,13 @@ body {
   font-size: 18px;
 }
 
-input.addClauseBtn {
+input.addClauseBtn, input.nextBtn {
   position: absolute;
   top: 478px;
   left: 242px;
 }
 
-input.startVisBtn, input.nextBtn {
+input.startVisBtn, input.prevBtn {
   position: absolute;
   top: 478px;
   left: 4px;
